@@ -20,4 +20,4 @@ workflows:
           cp -r Runner.app Payload/
           zip -r unsigned.ipa Payload
     artifacts:
-      - app/build/ios/iphoneos/unsigned.ipa
+      - build/ios/iphoneos/unsigned.ipa
