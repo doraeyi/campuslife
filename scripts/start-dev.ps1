@@ -8,6 +8,10 @@ if (-not $tunnelOpen) {
     Start-Process -FilePath "ssh" `
         -ArgumentList "-N", "-L", "${tunnelPort}:127.0.0.1:3306", "-p", "1122", "liam@kaikaizhen.myasustor.com" `
         -WindowStyle Hidden
+    do {
+        Start-Sleep -Milliseconds 500
+        $tunnelOpen = Test-NetConnection -ComputerName 127.0.0.1 -Port $tunnelPort -WarningAction SilentlyContinue -InformationLevel Quiet
+    } until ($tunnelOpen)
 } else {
     Write-Host "SSH tunnel already running on port $tunnelPort."
 }
@@ -16,7 +20,7 @@ $apiRunning = Test-NetConnection -ComputerName 127.0.0.1 -Port $apiPort -Warning
 if (-not $apiRunning) {
     Write-Host "Starting FastAPI on port $apiPort..."
     Start-Process -FilePath "$apiDir\venv\Scripts\python.exe" `
-        -ArgumentList "-m", "uvicorn", "main:app", "--port", "$apiPort" `
+        -ArgumentList "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "$apiPort" `
         -WorkingDirectory $apiDir `
         -WindowStyle Hidden `
         -RedirectStandardOutput "$apiDir\uvicorn.log" `
