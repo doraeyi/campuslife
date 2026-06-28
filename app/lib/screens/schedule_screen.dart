@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../models/shift.dart';
 import '../services/api_client.dart';
-import '../services/widget_service.dart';
 import 'add_shift_screen.dart';
 
 class ScheduleScreen extends StatefulWidget {
@@ -26,7 +25,6 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     setState(() {
       _shiftsFuture = _apiClient.fetchShifts();
     });
-    _shiftsFuture.then(WidgetService.updateNextShift).catchError((_) {});
   }
 
   Future<void> _openAddShift() async {
