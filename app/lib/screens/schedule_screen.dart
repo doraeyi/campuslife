@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/shift.dart';
 import '../services/api_client.dart';
+import 'add_shift_screen.dart';
 
 class ScheduleScreen extends StatefulWidget {
   const ScheduleScreen({super.key});
@@ -17,13 +18,33 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   @override
   void initState() {
     super.initState();
-    _shiftsFuture = _apiClient.fetchShifts();
+    _refresh();
+  }
+
+  void _refresh() {
+    setState(() {
+      _shiftsFuture = _apiClient.fetchShifts();
+    });
+  }
+
+  Future<void> _openAddShift() async {
+    final added = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(builder: (context) => const AddShiftScreen()),
+    );
+    if (added == true) {
+      _refresh();
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('我的班表')),
+      floatingActionButton: FloatingActionButton(
+        onPressed: _openAddShift,
+        child: const Icon(Icons.add),
+      ),
       body: FutureBuilder<List<Shift>>(
         future: _shiftsFuture,
         builder: (context, snapshot) {
