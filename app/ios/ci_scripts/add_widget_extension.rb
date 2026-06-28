@@ -64,6 +64,16 @@ embed_phase.symbol_dst_subfolder_spec = :plug_ins
 embed_build_file = embed_phase.add_file_reference(widget_target.product_reference)
 embed_build_file.settings = { 'ATTRIBUTES' => ['RemoveHeaderOnCopy'] }
 
+# Flutter's "Thin Binary" script processes the whole Runner.app, including
+# any embedded extensions, so it must run after the extension is copied in.
+# new_copy_files_build_phase appends to the end of the phase list, which put
+# it after Thin Binary - move it to just before that script phase instead.
+thin_binary_index = runner_target.build_phases.index { |p| p.respond_to?(:name) && p.name == 'Thin Binary' }
+if thin_binary_index
+  runner_target.build_phases.delete(embed_phase)
+  runner_target.build_phases.insert(thin_binary_index, embed_phase)
+end
+
 # Flutter's own script phases (Embed Pods Frameworks, Thin Binary, etc.) don't
 # declare input/output paths, which makes Xcode's new build system unable to
 # order them relative to the extension embed phase above and report a cycle.
