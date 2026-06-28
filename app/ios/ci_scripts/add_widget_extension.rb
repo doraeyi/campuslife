@@ -73,7 +73,7 @@ runner_target.build_phases.each do |phase|
   next unless phase.respond_to?(:input_paths)
   next unless phase.input_paths.empty? && phase.output_paths.empty?
 
-  phase.always_out_of_date = true if phase.respond_to?(:always_out_of_date=)
+  phase.always_out_of_date = '1' if phase.respond_to?(:always_out_of_date=)
 end
 
 project.save
