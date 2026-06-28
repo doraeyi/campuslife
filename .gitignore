@@ -3,6 +3,7 @@ __pycache__/
 *.pyc
 api/venv/
 .env
+*.log
 
 # Flutter / Dart
 app/build/
