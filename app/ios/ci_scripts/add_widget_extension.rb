@@ -64,6 +64,18 @@ embed_phase.symbol_dst_subfolder_spec = :plug_ins
 embed_build_file = embed_phase.add_file_reference(widget_target.product_reference)
 embed_build_file.settings = { 'ATTRIBUTES' => ['RemoveHeaderOnCopy'] }
 
+# Flutter's own script phases (Embed Pods Frameworks, Thin Binary, etc.) don't
+# declare input/output paths, which makes Xcode's new build system unable to
+# order them relative to the extension embed phase above and report a cycle.
+# Excluding them from dependency analysis (the same as unchecking "Based on
+# dependency analysis" in Xcode) breaks the cycle.
+runner_target.build_phases.each do |phase|
+  next unless phase.respond_to?(:input_paths)
+  next unless phase.input_paths.empty? && phase.output_paths.empty?
+
+  phase.always_out_of_date = true if phase.respond_to?(:always_out_of_date=)
+end
+
 project.save
 
 puts 'Added CampusLifeWidgetExtension target.'
