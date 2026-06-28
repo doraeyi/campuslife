@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.pyc
+api/venv/
+.env
+
+# Flutter / Dart
+app/build/
+app/.dart_tool/
+app/.flutter-plugin-dependencies
+app/.packages
+app/.pub-cache/
+app/.pub/
+app/ios/Pods/
+app/ios/.symlinks/
+app/android/.gradle/
+
+# Editor
+.vscode/
+.idea/
