@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import '../models/card_model.dart';
 import '../models/transaction.dart';
 import '../services/api_client.dart';
+import '../services/notification_service.dart';
 import 'add_transaction_sheet.dart';
 
 class WalletScreen extends ConsumerStatefulWidget {
@@ -34,11 +35,13 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
         _api.fetchTransactions(),
       ]);
       if (mounted) {
+        final cards = results[0] as List<AppCard>;
         setState(() {
-          _cards = results[0] as List<AppCard>;
+          _cards = cards;
           _transactions = results[1] as List<Transaction>;
           _loading = false;
         });
+        await NotificationService().checkCreditCardDueDates(cards);
       }
     } catch (_) {
       if (mounted) setState(() => _loading = false);
@@ -76,8 +79,148 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
     if (confirmed == true) {
       final val = double.tryParse(ctrl.text);
       if (val != null) {
-        await _api.updateCardBalance(card.id, val);
+        final updated = await _api.updateCardBalance(card.id, val);
+        await NotificationService().checkEasyCardBalance(updated);
         await _load();
+      }
+    }
+  }
+
+  Future<void> _showEditCard(AppCard card) async {
+    final nameCtrl = TextEditingController(text: card.name);
+    final bankCtrl = TextEditingController(text: card.bank ?? '');
+    final lastFourCtrl = TextEditingController(text: card.lastFour ?? '');
+    final dueDayCtrl = TextEditingController(text: card.paymentDueDate ?? '');
+    String selectedColor = card.color;
+
+    final confirmed = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setLocal) => Padding(
+          padding: EdgeInsets.only(
+            left: 20,
+            right: 20,
+            top: 20,
+            bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 36,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade300,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                '編輯卡片',
+                style: Theme.of(ctx)
+                    .textTheme
+                    .titleMedium
+                    ?.copyWith(fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: nameCtrl,
+                decoration: const InputDecoration(labelText: '卡片名稱'),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: bankCtrl,
+                decoration: const InputDecoration(labelText: '銀行（選填）'),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: lastFourCtrl,
+                decoration: const InputDecoration(labelText: '末四碼（選填）'),
+                keyboardType: TextInputType.number,
+                maxLength: 4,
+              ),
+              if (card.type == 'credit') ...[
+                TextField(
+                  controller: dueDayCtrl,
+                  decoration: const InputDecoration(
+                    labelText: '還款日（每月幾號，例：25）',
+                  ),
+                  keyboardType: TextInputType.number,
+                ),
+                const SizedBox(height: 10),
+              ],
+              const SizedBox(height: 4),
+              Text(
+                '顏色',
+                style: Theme.of(ctx).textTheme.labelMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: Theme.of(ctx).colorScheme.outline,
+                    ),
+              ),
+              const SizedBox(height: 10),
+              _ColorSwatches(
+                selected: selectedColor,
+                onChanged: (c) => setLocal(() => selectedColor = c),
+              ),
+              const SizedBox(height: 20),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      style: OutlinedButton.styleFrom(
+                        minimumSize: const Size.fromHeight(48),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14)),
+                      ),
+                      onPressed: () => Navigator.pop(ctx, false),
+                      child: const Text('取消'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: FilledButton(
+                      style: FilledButton.styleFrom(
+                        minimumSize: const Size.fromHeight(48),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14)),
+                      ),
+                      onPressed: () => Navigator.pop(ctx, true),
+                      child: const Text('儲存'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      try {
+        await _api.updateCard(
+          card.id,
+          name: nameCtrl.text.trim().isEmpty ? card.name : nameCtrl.text.trim(),
+          type: card.type,
+          color: selectedColor,
+          bank: bankCtrl.text.trim().isEmpty ? null : bankCtrl.text.trim(),
+          lastFour: lastFourCtrl.text.trim().isEmpty ? null : lastFourCtrl.text.trim(),
+          balance: card.balance,
+          paymentDueDate: dueDayCtrl.text.trim().isEmpty ? null : dueDayCtrl.text.trim(),
+        );
+        await _load();
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context)
+              .showSnackBar(SnackBar(content: Text('更新失敗：$e')));
+        }
       }
     }
   }
@@ -122,6 +265,7 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
                             currentIndex: _cardPage,
                             onPageChanged: (i) => setState(() => _cardPage = i),
                             onUpdateBalance: _showUpdateBalance,
+                            onEdit: _showEditCard,
                           ),
                   ),
                   // ── Transaction list ───────────────────────────────────
@@ -149,12 +293,14 @@ class _CardCarousel extends StatelessWidget {
     required this.currentIndex,
     required this.onPageChanged,
     required this.onUpdateBalance,
+    required this.onEdit,
   });
 
   final List<AppCard> cards;
   final int currentIndex;
   final ValueChanged<int> onPageChanged;
   final ValueChanged<AppCard> onUpdateBalance;
+  final ValueChanged<AppCard> onEdit;
 
   @override
   Widget build(BuildContext context) {
@@ -169,6 +315,7 @@ class _CardCarousel extends StatelessWidget {
             itemBuilder: (_, i) => _CardTile(
               card: cards[i],
               onUpdateBalance: () => onUpdateBalance(cards[i]),
+              onEdit: () => onEdit(cards[i]),
             ),
           ),
         ),
@@ -198,10 +345,15 @@ class _CardCarousel extends StatelessWidget {
 }
 
 class _CardTile extends StatelessWidget {
-  const _CardTile({required this.card, required this.onUpdateBalance});
+  const _CardTile({
+    required this.card,
+    required this.onUpdateBalance,
+    required this.onEdit,
+  });
 
   final AppCard card;
   final VoidCallback onUpdateBalance;
+  final VoidCallback onEdit;
 
   @override
   Widget build(BuildContext context) {
@@ -254,14 +406,29 @@ class _CardTile extends StatelessWidget {
                       ),
                   ],
                 ),
-                if (isEasycard)
-                  IconButton(
-                    icon: const Icon(Icons.edit_rounded, color: Colors.white70, size: 18),
-                    tooltip: '更新餘額',
-                    onPressed: onUpdateBalance,
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                  ),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (isEasycard)
+                      IconButton(
+                        icon: const Icon(Icons.account_balance_wallet_rounded,
+                            color: Colors.white70, size: 18),
+                        tooltip: '更新餘額',
+                        onPressed: onUpdateBalance,
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                      ),
+                    if (isEasycard) const SizedBox(width: 8),
+                    IconButton(
+                      icon: const Icon(Icons.edit_rounded,
+                          color: Colors.white70, size: 18),
+                      tooltip: '編輯卡片',
+                      onPressed: onEdit,
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                    ),
+                  ],
+                ),
               ],
             ),
             const Spacer(),
@@ -494,6 +661,52 @@ String _cardTypeLabel(String type) => switch (type) {
       'easycard' => '悠遊卡',
       _ => type,
     };
+
+// ── Color swatches for card edit ─────────────────────────────────────────────
+class _ColorSwatches extends StatelessWidget {
+  const _ColorSwatches({required this.selected, required this.onChanged});
+  final String selected;
+  final ValueChanged<String> onChanged;
+
+  static const _colors = [
+    '#3B82F6', '#6366F1', '#8B5CF6', '#EC4899',
+    '#EF4444', '#F59E0B', '#10B981', '#6B7280',
+    '#0EA5E9', '#14B8A6', '#F97316', '#84CC16',
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      spacing: 12,
+      runSpacing: 12,
+      children: _colors.map((hex) {
+        final color = Color(int.parse('FF${hex.substring(1)}', radix: 16));
+        final isSelected = selected.toUpperCase() == hex.toUpperCase();
+        return GestureDetector(
+          onTap: () => onChanged(hex),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 150),
+            width: 34,
+            height: 34,
+            decoration: BoxDecoration(
+              color: color,
+              shape: BoxShape.circle,
+              border: isSelected
+                  ? Border.all(color: Colors.white, width: 3)
+                  : null,
+              boxShadow: isSelected
+                  ? [BoxShadow(color: color.withValues(alpha: 0.6), blurRadius: 8)]
+                  : null,
+            ),
+            child: isSelected
+                ? const Icon(Icons.check, color: Colors.white, size: 16)
+                : null,
+          ),
+        );
+      }).toList(),
+    );
+  }
+}
 
 String _dateLabel(DateTime dt) {
   final now = DateTime.now();

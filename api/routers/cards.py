@@ -30,6 +30,27 @@ def create_card(
     return card
 
 
+@router.put("/{card_id}", response_model=schemas.CardRead)
+def update_card(
+    card_id: int,
+    payload: schemas.CardUpdate,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    card = (
+        db.query(models.Card)
+        .filter(models.Card.id == card_id, models.Card.user_id == current_user.id)
+        .first()
+    )
+    if card is None:
+        raise HTTPException(status_code=404, detail="找不到這張卡片")
+    for k, v in payload.model_dump().items():
+        setattr(card, k, v)
+    db.commit()
+    db.refresh(card)
+    return card
+
+
 @router.patch("/{card_id}/balance", response_model=schemas.CardRead)
 def update_card_balance(
     card_id: int,

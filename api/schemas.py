@@ -148,6 +148,10 @@ class CardCreate(CardBase):
     pass
 
 
+class CardUpdate(CardBase):
+    pass
+
+
 class CardRead(CardBase):
     model_config = ConfigDict(from_attributes=True)
 

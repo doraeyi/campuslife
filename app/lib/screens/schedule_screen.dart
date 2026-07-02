@@ -9,6 +9,7 @@ import '../services/api_client.dart';
 import '../services/salary_calculator.dart';
 import 'add_transaction_sheet.dart';
 import 'schedule_widgets.dart';
+import '../services/notification_service.dart';
 
 // ── Design tokens ──────────────────────────────────────────────────────────
 const _kWorkBlue   = Color(0xFF3B82F6);
@@ -63,6 +64,7 @@ class ScheduleScreenState extends State<ScheduleScreen> {
         _jobs = jobs;
         _salaryJob ??= jobs.isNotEmpty ? jobs.first : null;
       });
+      await NotificationService().checkSalaryReminder(jobs);
     } catch (_) {}
   }
 

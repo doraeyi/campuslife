@@ -248,6 +248,35 @@ class ApiClient {
     return data.map((json) => AppCard.fromJson(json as Map<String, dynamic>)).toList();
   }
 
+  Future<AppCard> updateCard(
+    int id, {
+    required String name,
+    required String type,
+    required String color,
+    String? bank,
+    String? lastFour,
+    double? balance,
+    String? paymentDueDate,
+    String? passExpiryDate,
+  }) async {
+    final response = await http.put(
+      Uri.parse('$baseUrl/cards/$id'),
+      headers: await _authHeaders(),
+      body: jsonEncode({
+        'name': name,
+        'type': type,
+        'color': color,
+        'bank': bank,
+        'last_four': lastFour,
+        'balance': balance,
+        'payment_due_date': paymentDueDate,
+        'pass_expiry_date': passExpiryDate,
+      }),
+    );
+    if (response.statusCode != 200) throw Exception('更新卡片失敗');
+    return AppCard.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+  }
+
   Future<void> deleteCard(int cardId) async {
     final response = await http.delete(Uri.parse('$baseUrl/cards/$cardId'), headers: await _authHeaders());
     if (response.statusCode != 200) throw Exception('刪除卡片失敗');
