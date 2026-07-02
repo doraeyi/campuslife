@@ -1,6 +1,6 @@
 from datetime import date, datetime, time
 
-from pydantic import BaseModel, ConfigDict, EmailStr
+from pydantic import BaseModel, ConfigDict, EmailStr, model_validator
 
 
 class JobBase(BaseModel):
@@ -124,6 +124,11 @@ class LineLinkCodeRead(BaseModel):
     code: str
 
 
+class LineLinkConfirm(BaseModel):
+    code: str
+    line_user_id: str
+
+
 class HasPasswordRead(BaseModel):
     has_password: bool
 
@@ -161,11 +166,32 @@ class CardRead(CardBase):
 class TransactionCreate(BaseModel):
     card_id: int | None = None
     amount: float
-    description: str
-    transaction_type: str  # "expense" | "income"
+    description: str | None = None
+    transaction_type: str | None = None
     category: str | None = None
     note: str | None = None
-    date: str | None = None  # YYYY-MM-DD, defaults to today
+    date: str | None = None
+    # Next.js field aliases
+    type: str | None = None
+    category_id: str | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _normalize(cls, data):
+        if not isinstance(data, dict):
+            return data
+        data = dict(data)
+        if not data.get("transaction_type") and data.get("type"):
+            data["transaction_type"] = data["type"]
+        if data.get("category") is None and data.get("category_id") is not None:
+            data["category"] = str(data["category_id"]) if data["category_id"] else "other"
+        if not data.get("description") and data.get("note"):
+            data["description"] = data["note"]
+        return data
+
+
+class TransactionCardAssign(BaseModel):
+    card_id: int | None = None
 
 
 class TransactionRead(BaseModel):
