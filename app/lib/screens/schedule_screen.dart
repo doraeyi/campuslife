@@ -3,6 +3,7 @@ import 'package:table_calendar/table_calendar.dart';
 
 import '../data/shift_type_colors.dart';
 import '../data/taiwan_holidays_2026.dart';
+import '../models/group_shift.dart';
 import '../models/job.dart';
 import '../models/shift.dart';
 import '../services/api_client.dart';
@@ -41,6 +42,7 @@ class ScheduleScreenState extends State<ScheduleScreen> {
   final ApiClient _apiClient = ApiClient();
   late Future<List<Shift>> _shiftsFuture;
   Map<DateTime, List<Shift>> _shiftsByDate = {};
+  Map<DateTime, List<GroupShift>> _groupShiftsByDate = {};
 
   DateTime _focusedDay = DateTime.now();
   DateTime _selectedDay = _dateOnly(DateTime.now());
@@ -80,9 +82,18 @@ class ScheduleScreenState extends State<ScheduleScreen> {
       }
       setState(() => _shiftsByDate = map);
     });
+    _apiClient.fetchGroupSchedule().then((groupShifts) {
+      final map = <DateTime, List<GroupShift>>{};
+      for (final gs in groupShifts) {
+        final day = _dateOnly(gs.date);
+        map.putIfAbsent(day, () => []).add(gs);
+      }
+      if (mounted) setState(() => _groupShiftsByDate = map);
+    }).catchError((_) {});
   }
 
   List<Shift> _shiftsFor(DateTime day) => _shiftsByDate[_dateOnly(day)] ?? [];
+  List<GroupShift> _groupShiftsFor(DateTime day) => _groupShiftsByDate[_dateOnly(day)] ?? [];
 
   void refresh() {
     _refresh();
@@ -133,6 +144,7 @@ class ScheduleScreenState extends State<ScheduleScreen> {
       builder: (ctx) => DayBottomSheet(
         date: day,
         shifts: _shiftsFor(day),
+        groupShifts: _groupShiftsFor(day),
         jobs: _jobs,
         isViewingSelf: true,
         onAdded: () {
@@ -225,6 +237,7 @@ class ScheduleScreenState extends State<ScheduleScreen> {
                             multiSelectMode: _multiSelectMode,
                             multiSelectedDays: _multiSelectedDays,
                             shiftsFor: _shiftsFor,
+                            groupShiftsFor: _groupShiftsFor,
                             colorScheme: colorScheme,
                             onDayTapped: _onDayTapped,
                             onDayLongPressed: _onDayLongPressed,
@@ -239,10 +252,12 @@ class ScheduleScreenState extends State<ScheduleScreen> {
                           child: Row(
                             children: [
                               const _LegendDot(color: _kTodayAmber, label: '今天'),
-                              const SizedBox(width: 16),
+                              const SizedBox(width: 12),
                               const _LegendDot(color: _kWorkBlue, label: '上班'),
-                              const SizedBox(width: 16),
+                              const SizedBox(width: 12),
                               const _LegendDot(color: _kHolidayRed, label: '假日'),
+                              const SizedBox(width: 12),
+                              const _LegendDot(color: Color(0xFF8B5CF6), label: '好友'),
                               const Spacer(),
                               if (!_multiSelectMode)
                                 Text(
@@ -448,6 +463,7 @@ class _CalendarCard extends StatelessWidget {
     required this.multiSelectMode,
     required this.multiSelectedDays,
     required this.shiftsFor,
+    required this.groupShiftsFor,
     required this.colorScheme,
     required this.onDayTapped,
     required this.onDayLongPressed,
@@ -459,6 +475,7 @@ class _CalendarCard extends StatelessWidget {
   final bool multiSelectMode;
   final Set<DateTime> multiSelectedDays;
   final List<Shift> Function(DateTime) shiftsFor;
+  final List<GroupShift> Function(DateTime) groupShiftsFor;
   final ColorScheme colorScheme;
   final void Function(DateTime, DateTime) onDayTapped;
   final void Function(DateTime, DateTime) onDayLongPressed;
@@ -505,13 +522,13 @@ class _CalendarCard extends StatelessWidget {
           calendarBuilders: CalendarBuilders(
             dowBuilder: (context, day) => _DowCell(day: day),
             defaultBuilder: (context, day, _) =>
-                _DayCell(day: day, shiftsFor: shiftsFor, colorScheme: colorScheme),
+                _DayCell(day: day, shiftsFor: shiftsFor, groupShiftsFor: groupShiftsFor, colorScheme: colorScheme),
             outsideBuilder: (context, day, _) =>
-                _DayCell(day: day, shiftsFor: shiftsFor, colorScheme: colorScheme, isOutside: true),
+                _DayCell(day: day, shiftsFor: shiftsFor, groupShiftsFor: groupShiftsFor, colorScheme: colorScheme, isOutside: true),
             todayBuilder: (context, day, _) =>
-                _DayCell(day: day, shiftsFor: shiftsFor, colorScheme: colorScheme, isToday: true),
+                _DayCell(day: day, shiftsFor: shiftsFor, groupShiftsFor: groupShiftsFor, colorScheme: colorScheme, isToday: true),
             selectedBuilder: (context, day, _) =>
-                _DayCell(day: day, shiftsFor: shiftsFor, colorScheme: colorScheme, isSelected: true),
+                _DayCell(day: day, shiftsFor: shiftsFor, groupShiftsFor: groupShiftsFor, colorScheme: colorScheme, isSelected: true),
             markerBuilder: (_, __, ___) => const SizedBox.shrink(),
           ),
         ),
@@ -557,6 +574,7 @@ class _DayCell extends StatelessWidget {
   const _DayCell({
     required this.day,
     required this.shiftsFor,
+    required this.groupShiftsFor,
     required this.colorScheme,
     this.isOutside = false,
     this.isToday = false,
@@ -565,6 +583,7 @@ class _DayCell extends StatelessWidget {
 
   final DateTime day;
   final List<Shift> Function(DateTime) shiftsFor;
+  final List<GroupShift> Function(DateTime) groupShiftsFor;
   final ColorScheme colorScheme;
   final bool isOutside;
   final bool isToday;
@@ -600,7 +619,9 @@ class _DayCell extends StatelessWidget {
     }
 
     final shifts = isOutside ? <Shift>[] : shiftsFor(day);
+    final groupShifts = isOutside ? <GroupShift>[] : groupShiftsFor(day);
     final hasShift = shifts.isNotEmpty;
+    final hasFriendShift = groupShifts.isNotEmpty;
     final label = hasShift
         ? (shifts.first.shiftType ?? shifts.first.startTime.substring(0, 5))
         : null;
@@ -613,20 +634,39 @@ class _DayCell extends StatelessWidget {
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        Container(
-          width: 34,
-          height: 34,
-          decoration: circleDeco,
-          alignment: Alignment.center,
-          child: Text(
-            '${day.day}',
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight:
-                  (isToday || isSelected) ? FontWeight.bold : FontWeight.w500,
-              color: numColor,
+        Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Container(
+              width: 34,
+              height: 34,
+              decoration: circleDeco,
+              alignment: Alignment.center,
+              child: Text(
+                '${day.day}',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight:
+                      (isToday || isSelected) ? FontWeight.bold : FontWeight.w500,
+                  color: numColor,
+                ),
+              ),
             ),
-          ),
+            // 好友指示點（右上角小紫點）
+            if (hasFriendShift)
+              Positioned(
+                top: 0,
+                right: 0,
+                child: Container(
+                  width: 8,
+                  height: 8,
+                  decoration: const BoxDecoration(
+                    color: Color(0xFF8B5CF6),
+                    shape: BoxShape.circle,
+                  ),
+                ),
+              ),
+          ],
         ),
         const SizedBox(height: 2),
         SizedBox(

@@ -9,8 +9,10 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../models/card_model.dart';
+import '../../models/group_shift.dart';
 import '../../models/job.dart';
 import '../../models/settings_models.dart';
+import '../../models/user.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/api_client.dart';
 import 'providers/settings_provider.dart';
@@ -77,6 +79,25 @@ class SettingsPage extends HookConsumerWidget {
                         onToggle: () => lineExpanded.value = !lineExpanded.value,
                       ),
                     ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 24),
+
+              // ── 好友 ──────────────────────────────────────────────────
+              _SectionTitle('社群'),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Material(
+                  elevation: 1,
+                  borderRadius: BorderRadius.circular(20),
+                  child: ListTile(
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                    leading: const Icon(Icons.group_rounded, color: Color(0xFF8B5CF6)),
+                    title: const Text('好友管理'),
+                    subtitle: const Text('新增好友・共享班表群組'),
+                    trailing: const Icon(Icons.chevron_right_rounded, color: Color(0xFFD1D5DB)),
+                    onTap: () => context.push('/friends'),
                   ),
                 ),
               ),
@@ -650,11 +671,31 @@ class _CardsAccordion extends ConsumerWidget {
         if (expanded)
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-            child: cards.isEmpty
-                ? const Center(
-                    child: Text('尚無卡片', style: TextStyle(color: _kGrey, fontSize: 13)),
+            child: Column(
+              children: [
+                Row(
+                  children: [
+                    const Text('卡片列表', style: TextStyle(color: _kGrey, fontSize: 13)),
+                    const Spacer(),
+                    TextButton.icon(
+                      onPressed: () => showCardFormSheet(context),
+                      icon: const Icon(Icons.add, size: 16),
+                      label: const Text('新增'),
+                      style: TextButton.styleFrom(
+                        foregroundColor: const Color(0xFF6366F1),
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      ),
+                    ),
+                  ],
+                ),
+                if (cards.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 8),
+                    child: Text('尚無卡片，點「新增」開始建立',
+                        style: TextStyle(color: Color(0xFF9CA3AF), fontSize: 13)),
                   )
-                : ConstrainedBox(
+                else
+                  ConstrainedBox(
                     constraints: const BoxConstraints(maxHeight: 240),
                     child: SingleChildScrollView(
                       child: Column(
@@ -662,6 +703,8 @@ class _CardsAccordion extends ConsumerWidget {
                       ),
                     ),
                   ),
+              ],
+            ),
           ),
       ],
     );
@@ -700,7 +743,7 @@ class _CardRow extends ConsumerWidget {
           // TODO: edit card sheet
           IconButton(
             icon: const Icon(Icons.edit_outlined, size: 18, color: _kGrey),
-            onPressed: () {},
+            onPressed: () => showCardFormSheet(context, card: card),
             tooltip: '編輯',
             constraints: const BoxConstraints(),
             padding: const EdgeInsets.all(6),
@@ -940,6 +983,13 @@ class _JobRow extends ConsumerWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           IconButton(
+            icon: const Icon(Icons.group_outlined, size: 18, color: Color(0xFF6366F1)),
+            onPressed: () => _showJobShareSheet(context, job),
+            tooltip: '共享設定',
+            constraints: const BoxConstraints(),
+            padding: const EdgeInsets.all(6),
+          ),
+          IconButton(
             icon: const Icon(Icons.edit_outlined, size: 18, color: _kGrey),
             onPressed: () => showJobFormSheet(context, job: job),
             tooltip: '編輯',
@@ -980,6 +1030,158 @@ class _JobRow extends ConsumerWidget {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Job Share Sheet
+// ─────────────────────────────────────────────────────────────────────────────
+
+void _showJobShareSheet(BuildContext context, Job job) {
+  final container = ProviderScope.containerOf(context);
+  showModalBottomSheet(
+    context: context,
+    isScrollControlled: true,
+    useRootNavigator: true,
+    backgroundColor: Colors.transparent,
+    builder: (_) => UncontrolledProviderScope(
+      container: container,
+      child: _JobShareSheet(job: job),
+    ),
+  );
+}
+
+class _JobShareSheet extends HookConsumerWidget {
+  const _JobShareSheet({required this.job});
+  final Job job;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final loading = useState(true);
+    final friends = useState<List<_FriendShareState>>([]);
+
+    useEffect(() {
+      () async {
+        try {
+          final api = ApiClient();
+          final allFriends = await api.fetchFriendships();
+          final shares = await api.fetchJobShares(job.id);
+          final sharedIds = shares.map((s) => s.sharedWith.id).toSet();
+          friends.value = allFriends
+              .where((f) => f.status == 'accepted')
+              .map((f) => _FriendShareState(friend: f.friend, shared: sharedIds.contains(f.friend.id)))
+              .toList();
+        } finally {
+          loading.value = false;
+        }
+      }();
+      return null;
+    }, []);
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      padding: EdgeInsets.fromLTRB(20, 20, 20, MediaQuery.of(context).viewInsets.bottom + 24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Center(
+            child: Container(
+              width: 36, height: 4,
+              decoration: BoxDecoration(
+                color: const Color(0xFFE5E7EB),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              CircleAvatar(backgroundColor: job.color, radius: 10),
+              const SizedBox(width: 8),
+              Text('${job.name} 共享設定',
+                  style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+            ],
+          ),
+          const SizedBox(height: 4),
+          const Text('選擇哪些好友可以看到你這份工作的班表',
+              style: TextStyle(fontSize: 13, color: _kGrey)),
+          const SizedBox(height: 16),
+          if (loading.value)
+            const Center(child: CircularProgressIndicator())
+          else if (friends.value.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 12),
+              child: Text('還沒有已接受的好友', style: TextStyle(color: _kGrey)),
+            )
+          else
+            ...friends.value.map((fs) => _FriendShareTile(
+              friendState: fs,
+              onToggle: (val) async {
+                final api = ApiClient();
+                try {
+                  if (val) {
+                    await api.addJobShare(job.id, fs.friend.id);
+                  } else {
+                    await api.removeJobShare(job.id, fs.friend.id);
+                  }
+                  friends.value = friends.value
+                      .map((f) => f.friend.id == fs.friend.id
+                          ? _FriendShareState(friend: f.friend, shared: val)
+                          : f)
+                      .toList();
+                } catch (_) {}
+              },
+            )),
+          const SizedBox(height: 8),
+        ],
+      ),
+    );
+  }
+}
+
+class _FriendShareState {
+  final AppUser friend;
+  final bool shared;
+  _FriendShareState({required this.friend, required this.shared});
+}
+
+class _FriendShareTile extends HookWidget {
+  const _FriendShareTile({required this.friendState, required this.onToggle});
+  final _FriendShareState friendState;
+  final Future<void> Function(bool) onToggle;
+
+  @override
+  Widget build(BuildContext context) {
+    final toggling = useState(false);
+    return SwitchListTile(
+      dense: true,
+      contentPadding: EdgeInsets.zero,
+      secondary: CircleAvatar(
+        radius: 18,
+        backgroundColor: const Color(0xFF6366F1).withValues(alpha: 0.15),
+        child: Text(
+          friendState.friend.displayName.isNotEmpty
+              ? friendState.friend.displayName[0].toUpperCase()
+              : '?',
+          style: const TextStyle(color: Color(0xFF6366F1), fontWeight: FontWeight.bold),
+        ),
+      ),
+      title: Text(friendState.friend.displayName, style: const TextStyle(fontSize: 14)),
+      subtitle: Text(friendState.friend.email, style: const TextStyle(fontSize: 12, color: _kGrey)),
+      value: friendState.shared,
+      activeColor: const Color(0xFF6366F1),
+      onChanged: toggling.value
+          ? null
+          : (val) async {
+              toggling.value = true;
+              await onToggle(val);
+              toggling.value = false;
+            },
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // About Card
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -999,6 +1201,242 @@ class _AboutCard extends ConsumerWidget {
         child: ListTile(
           title: const Text('易記帳'),
           trailing: Text(version, style: const TextStyle(color: _kGrey)),
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Card Form Sheet
+// ─────────────────────────────────────────────────────────────────────────────
+
+Future<void> showCardFormSheet(BuildContext context, {AppCard? card}) async {
+  final container = ProviderScope.containerOf(context);
+  await showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    useRootNavigator: true,
+    backgroundColor: Colors.transparent,
+    builder: (_) => UncontrolledProviderScope(
+      container: container,
+      child: _CardFormSheet(card: card),
+    ),
+  );
+}
+
+class _CardFormSheet extends HookConsumerWidget {
+  const _CardFormSheet({this.card});
+  final AppCard? card;
+
+  static const _types = [
+    ('credit', '💳 信用卡'),
+    ('debit', '🏧 金融卡'),
+    ('easycard', '🚌 悠遊卡'),
+  ];
+
+  static const _colors = [
+    '#6366F1', '#8B5CF6', '#EC4899',
+    '#EF4444', '#F97316', '#EAB308',
+    '#10B981', '#14B8A6', '#0EA5E9',
+    '#3B82F6', '#6B7280', '#1F2937',
+  ];
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final nameCtrl = useTextEditingController(text: card?.name ?? '');
+    final bankCtrl = useTextEditingController(text: card?.bank ?? '');
+    final lastFourCtrl = useTextEditingController(text: card?.lastFour ?? '');
+    final balanceCtrl = useTextEditingController(
+        text: card?.balance != null ? card!.balance!.toStringAsFixed(0) : '');
+    final type = useState(card?.type ?? 'credit');
+    final color = useState(card?.color ?? '#6366F1');
+    final saving = useState(false);
+    final formKey = useMemoized(GlobalKey<FormState>.new);
+
+    final colorValue = Color(int.parse('FF${color.value.replaceAll('#', '')}', radix: 16));
+
+    Future<void> save() async {
+      if (!(formKey.currentState?.validate() ?? false)) return;
+      saving.value = true;
+      try {
+        final balance = double.tryParse(balanceCtrl.text);
+        final bank = bankCtrl.text.trim().isEmpty ? null : bankCtrl.text.trim();
+        final lastFour = lastFourCtrl.text.trim().isEmpty ? null : lastFourCtrl.text.trim();
+        if (card == null) {
+          await ref.read(cardsProvider.notifier).addCard(
+            name: nameCtrl.text.trim(), type: type.value, color: color.value,
+            bank: bank, lastFour: lastFour, balance: balance,
+          );
+        } else {
+          await ref.read(cardsProvider.notifier).updateCard(
+            card!.id, name: nameCtrl.text.trim(), type: type.value, color: color.value,
+            bank: bank, lastFour: lastFour, balance: balance,
+          );
+        }
+        if (context.mounted) Navigator.pop(context);
+      } catch (_) {
+        saving.value = false;
+      }
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      padding: EdgeInsets.fromLTRB(20, 20, 20, MediaQuery.of(context).viewInsets.bottom + 24),
+      child: Form(
+        key: formKey,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 36, height: 4,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFE5E7EB),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(card == null ? '新增卡片' : '編輯卡片',
+                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 20),
+
+              // 類型
+              const Text('類型', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+              const SizedBox(height: 8),
+              Row(
+                children: _types.map((t) {
+                  final sel = type.value == t.$1;
+                  return Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: GestureDetector(
+                        onTap: () => type.value = t.$1,
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 150),
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                          decoration: BoxDecoration(
+                            color: sel ? colorValue.withValues(alpha: 0.15) : const Color(0xFFF3F4F6),
+                            borderRadius: BorderRadius.circular(12),
+                            border: sel ? Border.all(color: colorValue, width: 1.5) : null,
+                          ),
+                          child: Text(t.$2,
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: sel ? FontWeight.w600 : FontWeight.normal,
+                              color: sel ? colorValue : _kGrey,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+              const SizedBox(height: 16),
+
+              // 名稱
+              TextFormField(
+                controller: nameCtrl,
+                decoration: const InputDecoration(
+                  labelText: '卡片名稱 *',
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+                validator: (v) => v == null || v.trim().isEmpty ? '請輸入名稱' : null,
+              ),
+              const SizedBox(height: 12),
+
+              Row(
+                children: [
+                  Expanded(
+                    child: TextFormField(
+                      controller: bankCtrl,
+                      decoration: const InputDecoration(
+                        labelText: '銀行（選填）',
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  SizedBox(
+                    width: 100,
+                    child: TextFormField(
+                      controller: lastFourCtrl,
+                      decoration: const InputDecoration(
+                        labelText: '末四碼',
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                      ),
+                      keyboardType: TextInputType.number,
+                      maxLength: 4,
+                      buildCounter: (_, {required currentLength, required isFocused, maxLength}) => null,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+
+              TextFormField(
+                controller: balanceCtrl,
+                decoration: const InputDecoration(
+                  labelText: '目前餘額（選填）',
+                  prefixText: '\$ ',
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              ),
+              const SizedBox(height: 16),
+
+              // 顏色
+              const Text('顏色', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: _colors.map((hex) {
+                  final c = Color(int.parse('FF${hex.replaceAll('#', '')}', radix: 16));
+                  final sel = color.value == hex;
+                  return GestureDetector(
+                    onTap: () => color.value = hex,
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 150),
+                      width: 32, height: 32,
+                      decoration: BoxDecoration(
+                        color: c,
+                        shape: BoxShape.circle,
+                        border: sel ? Border.all(color: Colors.white, width: 3) : null,
+                        boxShadow: sel ? [BoxShadow(color: c.withValues(alpha: 0.5), blurRadius: 6)] : null,
+                      ),
+                      child: sel ? const Icon(Icons.check, color: Colors.white, size: 16) : null,
+                    ),
+                  );
+                }).toList(),
+              ),
+              const SizedBox(height: 24),
+
+              FilledButton(
+                onPressed: saving.value ? null : save,
+                style: FilledButton.styleFrom(
+                  minimumSize: const Size.fromHeight(48),
+                  backgroundColor: colorValue,
+                ),
+                child: saving.value
+                    ? const SizedBox(width: 20, height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                    : Text(card == null ? '新增' : '儲存'),
+              ),
+            ],
+          ),
         ),
       ),
     );

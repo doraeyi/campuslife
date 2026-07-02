@@ -66,6 +66,37 @@ class CardsNotifier extends AsyncNotifier<List<AppCard>> {
   @override
   Future<List<AppCard>> build() => ApiClient().fetchCards();
 
+  Future<AppCard> addCard({
+    required String name,
+    required String type,
+    required String color,
+    String? bank,
+    String? lastFour,
+    double? balance,
+  }) async {
+    final card = await ApiClient().createCard(
+      name: name, type: type, color: color,
+      bank: bank, lastFour: lastFour, balance: balance,
+    );
+    state = state.whenData((list) => [...list, card]);
+    return card;
+  }
+
+  Future<void> updateCard(int id, {
+    required String name,
+    required String type,
+    required String color,
+    String? bank,
+    String? lastFour,
+    double? balance,
+  }) async {
+    final card = await ApiClient().updateCard(
+      id, name: name, type: type, color: color,
+      bank: bank, lastFour: lastFour, balance: balance,
+    );
+    state = state.whenData((list) => list.map((c) => c.id == id ? card : c).toList());
+  }
+
   Future<void> deleteCard(int id) async {
     await ApiClient().deleteCard(id);
     state = state.whenData((list) => list.where((c) => c.id != id).toList());

@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/card_model.dart';
+import '../models/group_shift.dart';
 import '../models/income.dart';
 import '../models/job.dart';
 import '../models/settings_models.dart';
@@ -12,7 +13,7 @@ import '../models/transaction.dart';
 import '../models/user.dart';
 
 class ApiClient {
-  static const String baseUrl = 'http://192.168.0.16:8000';
+  static const String baseUrl = 'https://kaikaizhen.myasustor.com:1123/yiwallet';
 
   Future<Map<String, String>> _authHeaders() async {
     final prefs = await SharedPreferences.getInstance();
@@ -277,6 +278,34 @@ class ApiClient {
     return AppCard.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
   }
 
+  Future<AppCard> createCard({
+    required String name,
+    required String type,
+    required String color,
+    String? bank,
+    String? lastFour,
+    double? balance,
+    String? paymentDueDate,
+    String? passExpiryDate,
+  }) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/cards'),
+      headers: await _authHeaders(),
+      body: jsonEncode({
+        'name': name,
+        'type': type,
+        'color': color,
+        'bank': bank,
+        'last_four': lastFour,
+        'balance': balance,
+        'payment_due_date': paymentDueDate,
+        'pass_expiry_date': passExpiryDate,
+      }),
+    );
+    if (response.statusCode != 200 && response.statusCode != 201) throw Exception('新增卡片失敗');
+    return AppCard.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+  }
+
   Future<void> deleteCard(int cardId) async {
     final response = await http.delete(Uri.parse('$baseUrl/cards/$cardId'), headers: await _authHeaders());
     if (response.statusCode != 200) throw Exception('刪除卡片失敗');
@@ -398,5 +427,43 @@ class ApiClient {
       headers: await _authHeaders(),
     );
     if (response.statusCode != 200) throw Exception('接受好友邀請失敗');
+  }
+
+  // ── Group Schedule ────────────────────────────────────────────────────────
+
+  Future<List<GroupShift>> fetchGroupSchedule() async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/schedule/group'),
+      headers: await _authHeaders(),
+    );
+    if (response.statusCode != 200) throw Exception('載入群組班表失敗');
+    final List<dynamic> data = jsonDecode(response.body);
+    return data.map((json) => GroupShift.fromJson(json as Map<String, dynamic>)).toList();
+  }
+
+  Future<List<JobShareInfo>> fetchJobShares(int jobId) async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/jobs/$jobId/shares'),
+      headers: await _authHeaders(),
+    );
+    if (response.statusCode != 200) throw Exception('載入共享設定失敗');
+    final List<dynamic> data = jsonDecode(response.body);
+    return data.map((json) => JobShareInfo.fromJson(json as Map<String, dynamic>)).toList();
+  }
+
+  Future<void> addJobShare(int jobId, int friendId) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/jobs/$jobId/shares/$friendId'),
+      headers: await _authHeaders(),
+    );
+    if (response.statusCode != 200) throw Exception('共享失敗');
+  }
+
+  Future<void> removeJobShare(int jobId, int friendId) async {
+    final response = await http.delete(
+      Uri.parse('$baseUrl/jobs/$jobId/shares/$friendId'),
+      headers: await _authHeaders(),
+    );
+    if (response.statusCode != 200) throw Exception('取消共享失敗');
   }
 }

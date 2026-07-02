@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 import models
@@ -65,5 +66,77 @@ def delete_job(
     if job is None:
         raise HTTPException(status_code=404, detail="找不到這個工作")
     db.delete(job)
+    db.commit()
+    return {"status": "ok"}
+
+
+# ── Job sharing ───────────────────────────────────────────────────────────────
+
+@router.get("/{job_id}/shares", response_model=list[schemas.JobShareRead])
+def list_job_shares(
+    job_id: int,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    job = db.query(models.Job).filter(
+        models.Job.id == job_id, models.Job.user_id == current_user.id
+    ).first()
+    if job is None:
+        raise HTTPException(status_code=404, detail="找不到這個工作")
+    return db.query(models.JobShare).filter(models.JobShare.job_id == job_id).all()
+
+
+@router.post("/{job_id}/shares/{friend_id}", response_model=schemas.JobShareRead)
+def add_job_share(
+    job_id: int,
+    friend_id: int,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    job = db.query(models.Job).filter(
+        models.Job.id == job_id, models.Job.user_id == current_user.id
+    ).first()
+    if job is None:
+        raise HTTPException(status_code=404, detail="找不到這個工作")
+
+    friendship = db.query(models.Friendship).filter(
+        models.Friendship.status == "accepted",
+        or_(
+            (models.Friendship.user_id == current_user.id) & (models.Friendship.friend_id == friend_id),
+            (models.Friendship.user_id == friend_id) & (models.Friendship.friend_id == current_user.id),
+        ),
+    ).first()
+    if friendship is None:
+        raise HTTPException(status_code=400, detail="尚未成為好友")
+
+    existing = db.query(models.JobShare).filter(
+        models.JobShare.job_id == job_id,
+        models.JobShare.shared_with_id == friend_id,
+    ).first()
+    if existing:
+        return existing
+
+    share = models.JobShare(job_id=job_id, owner_id=current_user.id, shared_with_id=friend_id)
+    db.add(share)
+    db.commit()
+    db.refresh(share)
+    return share
+
+
+@router.delete("/{job_id}/shares/{friend_id}")
+def remove_job_share(
+    job_id: int,
+    friend_id: int,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    share = db.query(models.JobShare).filter(
+        models.JobShare.job_id == job_id,
+        models.JobShare.owner_id == current_user.id,
+        models.JobShare.shared_with_id == friend_id,
+    ).first()
+    if share is None:
+        raise HTTPException(status_code=404)
+    db.delete(share)
     db.commit()
     return {"status": "ok"}

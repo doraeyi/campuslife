@@ -55,6 +55,31 @@ def list_friend_shifts(
     )
 
 
+@router.get("/group", response_model=list[schemas.GroupShiftRead])
+def get_group_schedule(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """取得好友共享給我的班表（依 job_shares 過濾）。"""
+    shares = (
+        db.query(models.JobShare)
+        .filter(models.JobShare.shared_with_id == current_user.id)
+        .all()
+    )
+    result = []
+    for share in shares:
+        shifts = (
+            db.query(models.Shift)
+            .filter(
+                models.Shift.job_id == share.job_id,
+                models.Shift.user_id == share.owner_id,
+            )
+            .all()
+        )
+        result.extend(shifts)
+    return result
+
+
 @router.post("", response_model=schemas.ShiftRead)
 def create_shift(
     shift: schemas.ShiftCreate,

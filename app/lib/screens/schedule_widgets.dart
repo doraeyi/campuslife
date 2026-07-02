@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../data/shift_type_colors.dart';
 import '../data/taiwan_holidays_2026.dart';
+import '../models/group_shift.dart';
 import '../models/job.dart';
 import '../models/shift.dart';
 import '../services/api_client.dart';
@@ -22,6 +23,7 @@ class DayBottomSheet extends StatefulWidget {
     super.key,
     required this.date,
     required this.shifts,
+    this.groupShifts = const [],
     required this.jobs,
     required this.isViewingSelf,
     required this.onAdded,
@@ -29,6 +31,7 @@ class DayBottomSheet extends StatefulWidget {
 
   final DateTime date;
   final List<Shift> shifts;
+  final List<GroupShift> groupShifts;
   final List<Job> jobs;
   final bool isViewingSelf;
   final VoidCallback onAdded;
@@ -128,8 +131,53 @@ class _DayBottomSheetState extends State<DayBottomSheet> {
                       ],
                     ),
                   )),
+            // ── 好友班表 ─────────────────────────────────────────────────
+            if (widget.groupShifts.isNotEmpty) ...[
+              const Divider(),
+              Row(
+                children: [
+                  Container(
+                    width: 8, height: 8,
+                    decoration: const BoxDecoration(
+                      color: Color(0xFF8B5CF6), shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  const Text('好友班表', style: TextStyle(
+                    fontSize: 13, fontWeight: FontWeight.w600,
+                    color: Color(0xFF8B5CF6),
+                  )),
+                ],
+              ),
+              const SizedBox(height: 4),
+              ...widget.groupShifts.map((gs) => ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: CircleAvatar(
+                  backgroundColor: const Color(0xFF8B5CF6).withValues(alpha: 0.15),
+                  radius: 16,
+                  child: Text(
+                    gs.owner.displayName.isNotEmpty
+                        ? gs.owner.displayName[0].toUpperCase()
+                        : '?',
+                    style: const TextStyle(
+                      color: Color(0xFF8B5CF6),
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                title: Text(
+                  '${gs.startTime.substring(0, 5)} - ${gs.endTime.substring(0, 5)}',
+                  style: const TextStyle(fontSize: 14),
+                ),
+                subtitle: Text(
+                  gs.owner.displayName + (gs.job != null ? '・${gs.job!.name}' : ''),
+                  style: const TextStyle(fontSize: 12, color: Color(0xFF6B7280)),
+                ),
+              )),
+            ],
             if (widget.isViewingSelf) ...[
-              if (widget.shifts.isNotEmpty) const Divider(),
+              if (widget.shifts.isNotEmpty || widget.groupShifts.isNotEmpty) const Divider(),
               const Text('快速新增', style: TextStyle(fontWeight: FontWeight.w600)),
               const SizedBox(height: 8),
               Wrap(

@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'features/settings/profile_page.dart';
 import 'features/settings/settings_page.dart';
 import 'screens/app_scaffold.dart';
+import 'screens/friends_screen.dart';
 import 'screens/home_tab.dart';
 import 'screens/income_tab.dart';
 import 'screens/login_screen.dart';
@@ -39,6 +40,10 @@ final appRouter = GoRouter(
     GoRoute(
       path: '/settings/profile',
       builder: (_, __) => const ProfilePage(),
+    ),
+    GoRoute(
+      path: '/friends',
+      builder: (_, __) => const FriendsScreen(),
     ),
 
     // ── Main shell ──────────────────────────────────────────────────────

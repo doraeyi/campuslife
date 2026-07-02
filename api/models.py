@@ -109,3 +109,17 @@ class Friendship(Base):
     friend_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     status = Column(String(20), nullable=False, default="pending")
     created_at = Column(DateTime, server_default=func.now())
+
+
+class JobShare(Base):
+    __tablename__ = "job_shares"
+    __table_args__ = (UniqueConstraint("job_id", "shared_with_id", name="uq_job_share"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    job_id = Column(Integer, ForeignKey("jobs.id", ondelete="CASCADE"), nullable=False, index=True)
+    owner_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    shared_with_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    created_at = Column(DateTime, server_default=func.now())
+
+    job = relationship("Job")
+    shared_with = relationship("User", foreign_keys=[shared_with_id])

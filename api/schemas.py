@@ -223,3 +223,23 @@ class FriendshipRead(BaseModel):
     status: str
     friend: UserRead
     incoming: bool
+
+
+class JobShareRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    shared_with: UserRead
+
+
+class GroupShiftRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    date: date
+    start_time: time
+    end_time: time
+    shift_type: str | None = None
+    note: str | None = None
+    job: JobRead | None = None
+    owner: UserRead
