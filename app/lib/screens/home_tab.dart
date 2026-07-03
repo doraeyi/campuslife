@@ -134,13 +134,6 @@ class _HomeTabState extends ConsumerState<HomeTab> {
                       '嗨，${user?.displayName ?? ''}',
                       style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
                     ),
-                    actions: [
-                      IconButton(
-                        icon: const Icon(Icons.add_rounded),
-                        tooltip: '快速記帳',
-                        onPressed: _openAddTransaction,
-                      ),
-                    ],
                   ),
 
                   SliverToBoxAdapter(

@@ -81,7 +81,7 @@ class _BottomBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return BottomAppBar(
-      color: Colors.white,
+      color: Theme.of(context).colorScheme.surface,
       surfaceTintColor: Colors.transparent,
       elevation: 0,
       notchMargin: 8,
@@ -91,8 +91,10 @@ class _BottomBar extends StatelessWidget {
         top: false,
         child: Container(
           height: 60,
-          decoration: const BoxDecoration(
-            border: Border(top: BorderSide(color: Color(0xFFE5E7EB))),
+          decoration: BoxDecoration(
+            border: Border(top: BorderSide(
+              color: Theme.of(context).colorScheme.outlineVariant,
+            )),
           ),
           child: Row(
             children: [

@@ -46,7 +46,7 @@ class SettingsPage extends HookConsumerWidget {
     final jobExpanded = useState(false);
 
     return Scaffold(
-      backgroundColor: _kBg,
+      backgroundColor: Theme.of(context).colorScheme.surfaceContainerLowest,
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(vertical: 16),
