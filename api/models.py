@@ -35,6 +35,21 @@ class Job(Base):
     health_insurance_fee = Column(Float, nullable=False, default=0)
     created_at = Column(DateTime, server_default=func.now())
 
+    presets = relationship(
+        "ShiftPreset", cascade="all, delete-orphan",
+        order_by="ShiftPreset.id", lazy="selectin",
+    )
+
+
+class ShiftPreset(Base):
+    __tablename__ = "shift_presets"
+
+    id = Column(Integer, primary_key=True, index=True)
+    job_id = Column(Integer, ForeignKey("jobs.id", ondelete="CASCADE"), nullable=False, index=True)
+    label = Column(String(20), nullable=False)
+    start_time = Column(Time, nullable=False)
+    end_time = Column(Time, nullable=False)
+
 
 class Card(Base):
     __tablename__ = "cards"

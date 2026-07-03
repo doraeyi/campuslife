@@ -3,6 +3,7 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../models/job.dart';
+import '../../../services/api_client.dart';
 import '../providers/settings_provider.dart';
 
 const _kJobColors = [
@@ -55,6 +56,7 @@ class JobFormSheet extends HookConsumerWidget {
     final selectedColor = useState(isEditing ? colorToHex(job!.color) : _kJobColors.first);
     final payType = useState(job?.payType ?? PayType.hourly);
     final isSaving = useState(false);
+    final presets = useState<List<ShiftPreset>>(job?.presets ?? []);
 
     useListenable(nameCtrl);
     useListenable(rateCtrl);
@@ -251,6 +253,70 @@ class JobFormSheet extends HookConsumerWidget {
             ),
             const SizedBox(height: 24),
 
+            // ── 班別設定（只有編輯時顯示）──────────────────────────────
+            if (isEditing) ...[
+              const Divider(height: 32),
+              Row(
+                children: [
+                  const Text('班別設定',
+                      style: TextStyle(fontSize: 13, color: Color(0xFF6B7280))),
+                  const Spacer(),
+                  TextButton.icon(
+                    onPressed: () async {
+                      final result = await showDialog<ShiftPreset>(
+                        context: context,
+                        builder: (_) => _AddPresetDialog(jobId: job!.id),
+                      );
+                      if (result != null) {
+                        presets.value = [...presets.value, result];
+                        ref.invalidate(settingsJobsProvider);
+                      }
+                    },
+                    icon: const Icon(Icons.add, size: 15),
+                    label: const Text('新增班別'),
+                    style: TextButton.styleFrom(
+                      foregroundColor: const Color(0xFF6366F1),
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              if (presets.value.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.only(bottom: 8),
+                  child: Text('尚未設定班別，新增後可在排班時快速套用',
+                      style: TextStyle(fontSize: 12, color: Color(0xFF9CA3AF))),
+                )
+              else
+                ...presets.value.map((p) => ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  leading: CircleAvatar(
+                    backgroundColor: _hexToColor(selectedColor.value).withValues(alpha: 0.15),
+                    radius: 14,
+                    child: Text(p.label[0],
+                        style: TextStyle(
+                          fontSize: 11, fontWeight: FontWeight.bold,
+                          color: _hexToColor(selectedColor.value),
+                        )),
+                  ),
+                  title: Text(p.label, style: const TextStyle(fontSize: 14)),
+                  subtitle: Text('${p.displayStart} - ${p.displayEnd}',
+                      style: const TextStyle(fontSize: 12, color: Color(0xFF6B7280))),
+                  trailing: IconButton(
+                    icon: const Icon(Icons.delete_outline, size: 18, color: Color(0xFFEF4444)),
+                    constraints: const BoxConstraints(),
+                    padding: const EdgeInsets.all(6),
+                    onPressed: () async {
+                      await ApiClient().deleteShiftPreset(job!.id, p.id);
+                      presets.value = presets.value.where((x) => x.id != p.id).toList();
+                      ref.invalidate(settingsJobsProvider);
+                    },
+                  ),
+                )),
+            ],
+
             // 儲存
             SizedBox(
               width: double.infinity,
@@ -288,6 +354,89 @@ InputDecoration _inputDeco(String label, {String? prefix, String? suffix}) {
     border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
     contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
   );
+}
+
+class _AddPresetDialog extends HookWidget {
+  const _AddPresetDialog({required this.jobId});
+  final int jobId;
+
+  @override
+  Widget build(BuildContext context) {
+    final labelCtrl = useTextEditingController();
+    final startCtrl = useTextEditingController(text: '09:00');
+    final endCtrl = useTextEditingController(text: '17:00');
+    final saving = useState(false);
+
+    Future<void> submit() async {
+      final label = labelCtrl.text.trim();
+      final start = startCtrl.text.trim();
+      final end = endCtrl.text.trim();
+      if (label.isEmpty || start.isEmpty || end.isEmpty) return;
+      saving.value = true;
+      try {
+        final preset = await ApiClient().addShiftPreset(jobId, label, start, end);
+        if (context.mounted) Navigator.pop(context, preset);
+      } catch (e) {
+        saving.value = false;
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+        }
+      }
+    }
+
+    return AlertDialog(
+      title: const Text('新增班別'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(
+            controller: labelCtrl,
+            autofocus: true,
+            decoration: _inputDeco('班別名稱（如：早班）'),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: startCtrl,
+                  decoration: _inputDeco('開始時間'),
+                  keyboardType: TextInputType.datetime,
+                ),
+              ),
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 8),
+                child: Text('−'),
+              ),
+              Expanded(
+                child: TextField(
+                  controller: endCtrl,
+                  decoration: _inputDeco('結束時間'),
+                  keyboardType: TextInputType.datetime,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          const Text('格式：HH:MM，例如 08:00',
+              style: TextStyle(fontSize: 11, color: Color(0xFF9CA3AF))),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('取消'),
+        ),
+        FilledButton(
+          onPressed: saving.value ? null : submit,
+          child: saving.value
+              ? const SizedBox(width: 16, height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+              : const Text('新增'),
+        ),
+      ],
+    );
+  }
 }
 
 class _TypeButton extends StatelessWidget {

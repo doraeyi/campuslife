@@ -143,6 +143,24 @@ class ApiClient {
     if (response.statusCode != 200) throw Exception('刪除工作失敗');
   }
 
+  Future<ShiftPreset> addShiftPreset(int jobId, String label, String startTime, String endTime) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/jobs/$jobId/presets'),
+      headers: await _authHeaders(),
+      body: jsonEncode({'label': label, 'start_time': '$startTime:00', 'end_time': '$endTime:00'}),
+    );
+    if (response.statusCode != 200) throw Exception('新增班別失敗');
+    return ShiftPreset.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+  }
+
+  Future<void> deleteShiftPreset(int jobId, int presetId) async {
+    final response = await http.delete(
+      Uri.parse('$baseUrl/jobs/$jobId/presets/$presetId'),
+      headers: await _authHeaders(),
+    );
+    if (response.statusCode != 200) throw Exception('刪除班別失敗');
+  }
+
   // ── User Profile ──────────────────────────────────────────────────────────
 
   Future<UserProfile> fetchMe() async {

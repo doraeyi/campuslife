@@ -22,10 +22,26 @@ class JobUpdate(JobBase):
     pass
 
 
+class ShiftPresetRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    label: str
+    start_time: time
+    end_time: time
+
+
+class ShiftPresetCreate(BaseModel):
+    label: str
+    start_time: time
+    end_time: time
+
+
 class JobRead(JobBase):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
+    presets: list[ShiftPresetRead] = []
 
 
 class ShiftBase(BaseModel):

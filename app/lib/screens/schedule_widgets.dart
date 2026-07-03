@@ -43,6 +43,13 @@ class DayBottomSheet extends StatefulWidget {
 class _DayBottomSheetState extends State<DayBottomSheet> {
   final ApiClient _apiClient = ApiClient();
   bool _saving = false;
+  Job? _selectedJob;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedJob = widget.jobs.isNotEmpty ? widget.jobs.first : null;
+  }
 
   Future<void> _deleteShift(int shiftId) async {
     try {
@@ -54,18 +61,35 @@ class _DayBottomSheetState extends State<DayBottomSheet> {
     }
   }
 
-  Future<void> _quickAdd(String label, TimeOfDay start, TimeOfDay end) async {
-    if (widget.jobs.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('請先在設定裡新增工作')));
-      return;
+  Future<void> _quickAddPreset(ShiftPreset preset) async {
+    setState(() => _saving = true);
+    try {
+      final start = preset.displayStart.split(':');
+      final end = preset.displayEnd.split(':');
+      await _apiClient.createShift(
+        date: widget.date,
+        startTime: '${preset.startTime.substring(0, 5)}:00',
+        endTime: '${preset.endTime.substring(0, 5)}:00',
+        jobId: _selectedJob?.id,
+        shiftType: preset.label,
+      );
+      widget.onAdded();
+      if (mounted) Navigator.pop(context);
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('失敗:$e')));
+    } finally {
+      if (mounted) setState(() => _saving = false);
     }
+  }
+
+  Future<void> _quickAdd(String label, TimeOfDay start, TimeOfDay end) async {
     setState(() => _saving = true);
     try {
       await _apiClient.createShift(
         date: widget.date,
         startTime: fmtTime(start),
         endTime: fmtTime(end),
-        jobId: widget.jobs.first.id,
+        jobId: _selectedJob?.id,
         shiftType: label,
       );
       widget.onAdded();
@@ -180,19 +204,73 @@ class _DayBottomSheetState extends State<DayBottomSheet> {
               if (widget.shifts.isNotEmpty || widget.groupShifts.isNotEmpty) const Divider(),
               const Text('快速新增', style: TextStyle(fontWeight: FontWeight.w600)),
               const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: shiftPresets.map((p) {
-                  final chipColor = colorForShiftType(p.label) ?? Colors.grey;
-                  return ActionChip(
-                    label: Text(p.label, style: const TextStyle(color: Colors.white)),
-                    backgroundColor: chipColor,
-                    onPressed: _saving ? null : () => _quickAdd(p.label, p.start, p.end),
-                    avatar: Icon(Icons.add, color: Colors.white.withValues(alpha: 0.8), size: 16),
+
+              // ── 工作選擇器 ────────────────────────────────────────────
+              if (widget.jobs.isNotEmpty) ...[
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: widget.jobs.map((job) {
+                      final selected = _selectedJob?.id == job.id;
+                      return Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: ChoiceChip(
+                          label: Text(job.name),
+                          selected: selected,
+                          avatar: CircleAvatar(
+                            backgroundColor: job.color,
+                            radius: 8,
+                          ),
+                          onSelected: (_) => setState(() => _selectedJob = job),
+                          selectedColor: job.color.withValues(alpha: 0.2),
+                          side: selected
+                              ? BorderSide(color: job.color, width: 1.5)
+                              : BorderSide.none,
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ),
+                const SizedBox(height: 10),
+              ],
+
+              // ── 班別快捷 ──────────────────────────────────────────────
+              Builder(builder: (context) {
+                final jobPresets = _selectedJob?.presets ?? [];
+                if (jobPresets.isNotEmpty) {
+                  // 顯示工作自訂班別
+                  return Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: jobPresets.map((p) {
+                      final chipColor = _selectedJob?.color ?? Colors.grey;
+                      return ActionChip(
+                        label: Text(
+                          '${p.label}  ${p.displayStart}-${p.displayEnd}',
+                          style: const TextStyle(color: Colors.white, fontSize: 12),
+                        ),
+                        backgroundColor: chipColor,
+                        onPressed: _saving ? null : () => _quickAddPreset(p),
+                        avatar: Icon(Icons.add, color: Colors.white.withValues(alpha: 0.8), size: 14),
+                      );
+                    }).toList(),
                   );
-                }).toList(),
-              ),
+                }
+                // 無自訂班別 → 顯示預設班別
+                return Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: shiftPresets.map((p) {
+                    final chipColor = colorForShiftType(p.label) ?? Colors.grey;
+                    return ActionChip(
+                      label: Text(p.label, style: const TextStyle(color: Colors.white)),
+                      backgroundColor: chipColor,
+                      onPressed: _saving ? null : () => _quickAdd(p.label, p.start, p.end),
+                      avatar: Icon(Icons.add, color: Colors.white.withValues(alpha: 0.8), size: 16),
+                    );
+                  }).toList(),
+                );
+              }),
               const SizedBox(height: 8),
               TextButton.icon(
                 onPressed: () {

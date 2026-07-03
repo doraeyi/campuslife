@@ -70,6 +70,51 @@ def delete_job(
     return {"status": "ok"}
 
 
+# ── Shift presets ────────────────────────────────────────────────────────────
+
+@router.post("/{job_id}/presets", response_model=schemas.ShiftPresetRead)
+def add_preset(
+    job_id: int,
+    payload: schemas.ShiftPresetCreate,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    job = db.query(models.Job).filter(
+        models.Job.id == job_id, models.Job.user_id == current_user.id
+    ).first()
+    if job is None:
+        raise HTTPException(status_code=404, detail="找不到這個工作")
+    preset = models.ShiftPreset(job_id=job_id, **payload.model_dump())
+    db.add(preset)
+    db.commit()
+    db.refresh(preset)
+    return preset
+
+
+@router.delete("/{job_id}/presets/{preset_id}")
+def delete_preset(
+    job_id: int,
+    preset_id: int,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    preset = (
+        db.query(models.ShiftPreset)
+        .join(models.Job)
+        .filter(
+            models.ShiftPreset.id == preset_id,
+            models.ShiftPreset.job_id == job_id,
+            models.Job.user_id == current_user.id,
+        )
+        .first()
+    )
+    if preset is None:
+        raise HTTPException(status_code=404)
+    db.delete(preset)
+    db.commit()
+    return {"status": "ok"}
+
+
 # ── Job sharing ───────────────────────────────────────────────────────────────
 
 @router.get("/{job_id}/shares", response_model=list[schemas.JobShareRead])
