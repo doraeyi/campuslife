@@ -26,6 +26,7 @@ void showJobFormSheet(BuildContext context, {Job? job}) {
   showModalBottomSheet(
     context: context,
     isScrollControlled: true,
+    useRootNavigator: true,
     backgroundColor: Colors.transparent,
     builder: (_) => JobFormSheet(job: job),
   );

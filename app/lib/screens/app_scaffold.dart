@@ -37,84 +37,67 @@ class AppScaffold extends HookConsumerWidget {
     return Scaffold(
       extendBody: true,
       body: child,
-      floatingActionButton: _AddFab(
-        onTap: () => _showQuickAdd(context),
-      ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
-      bottomNavigationBar: _BottomBar(
+      bottomNavigationBar: _FloatingPillNav(
         location: location,
         onNavigate: context.go,
+        onAdd: () => _showQuickAdd(context),
       ),
     );
   }
 }
 
-// ── FAB ───────────────────────────────────────────────────────────────────────
-class _AddFab extends StatelessWidget {
-  const _AddFab({this.onTap});
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: 56,
-      height: 56,
-      child: FloatingActionButton(
-        backgroundColor: _kActive,
-        foregroundColor: Colors.white,
-        elevation: 4,
-        shape: const CircleBorder(),
-        onPressed: onTap,
-        child: const Icon(Icons.add, size: 28),
-      ),
-    );
-  }
-}
-
-// ── BottomBar ─────────────────────────────────────────────────────────────────
-class _BottomBar extends StatelessWidget {
-  const _BottomBar({required this.location, required this.onNavigate});
+// ── Floating pill nav ─────────────────────────────────────────────────────────
+class _FloatingPillNav extends StatelessWidget {
+  const _FloatingPillNav({
+    required this.location,
+    required this.onNavigate,
+    required this.onAdd,
+  });
 
   final String location;
   final void Function(String) onNavigate;
+  final VoidCallback onAdd;
 
   @override
   Widget build(BuildContext context) {
-    return BottomAppBar(
-      color: Theme.of(context).colorScheme.surface,
-      surfaceTintColor: Colors.transparent,
-      elevation: 0,
-      notchMargin: 8,
-      shape: const CircularNotchedRectangle(),
-      padding: EdgeInsets.zero,
-      child: SafeArea(
-        top: false,
+    final bottomPadding = MediaQuery.of(context).padding.bottom;
+
+    return Container(
+      // Transparent so body content shows through the margins
+      color: Colors.transparent,
+      height: 64 + bottomPadding + 20,
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(20, 6, 20, bottomPadding + 10),
         child: Container(
-          height: 60,
           decoration: BoxDecoration(
-            border: Border(top: BorderSide(
-              color: Theme.of(context).colorScheme.outlineVariant,
-            )),
+            color: Theme.of(context).colorScheme.surface,
+            borderRadius: BorderRadius.circular(40),
+            boxShadow: [
+              BoxShadow(
+                color: Theme.of(context).brightness == Brightness.dark
+                    ? Colors.black.withValues(alpha: 0.35)
+                    : Colors.black.withValues(alpha: 0.12),
+                blurRadius: 24,
+                spreadRadius: 2,
+                offset: const Offset(0, 4),
+              ),
+            ],
           ),
           child: Row(
             children: [
-              ..._kLeftDests.map(
-                (d) => _TabItem(
-                  icon: d.icon,
-                  label: d.label,
-                  isActive: location.startsWith(d.path),
-                  onTap: () => onNavigate(d.path),
-                ),
-              ),
-              const SizedBox(width: 72),
-              ..._kRightDests.map(
-                (d) => _TabItem(
-                  icon: d.icon,
-                  label: d.label,
-                  isActive: location.startsWith(d.path),
-                  onTap: () => onNavigate(d.path),
-                ),
-              ),
+              ..._kLeftDests.map((d) => _PillItem(
+                icon: d.icon,
+                label: d.label,
+                isActive: location.startsWith(d.path),
+                onTap: () => onNavigate(d.path),
+              )),
+              _PillFab(onTap: onAdd),
+              ..._kRightDests.map((d) => _PillItem(
+                icon: d.icon,
+                label: d.label,
+                isActive: location.startsWith(d.path),
+                onTap: () => onNavigate(d.path),
+              )),
             ],
           ),
         ),
@@ -123,9 +106,9 @@ class _BottomBar extends StatelessWidget {
   }
 }
 
-// ── TabItem ───────────────────────────────────────────────────────────────────
-class _TabItem extends StatelessWidget {
-  const _TabItem({
+// ── PillItem ──────────────────────────────────────────────────────────────────
+class _PillItem extends StatelessWidget {
+  const _PillItem({
     required this.icon,
     required this.label,
     required this.isActive,
@@ -147,12 +130,21 @@ class _TabItem extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, size: 24, color: color),
-            const SizedBox(height: 3),
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 180),
+              curve: Curves.easeOut,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              decoration: BoxDecoration(
+                color: isActive ? _kActive.withValues(alpha: 0.15) : Colors.transparent,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Icon(icon, size: 22, color: color),
+            ),
+            const SizedBox(height: 2),
             Text(
               label,
               style: TextStyle(
-                fontSize: 11,
+                fontSize: 10,
                 color: color,
                 fontWeight: isActive ? FontWeight.w600 : FontWeight.w400,
               ),
@@ -164,10 +156,44 @@ class _TabItem extends StatelessWidget {
   }
 }
 
+// ── Center FAB inside pill ────────────────────────────────────────────────────
+class _PillFab extends StatelessWidget {
+  const _PillFab({required this.onTap});
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Center(
+        child: GestureDetector(
+          onTap: onTap,
+          child: Container(
+            width: 46,
+            height: 46,
+            decoration: const BoxDecoration(
+              color: _kActive,
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: Color(0x50FBBF24),
+                  blurRadius: 10,
+                  offset: Offset(0, 3),
+                ),
+              ],
+            ),
+            child: const Icon(Icons.add, color: Colors.white, size: 26),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 // ── Quick-add sheet ───────────────────────────────────────────────────────────
 void _showQuickAdd(BuildContext context) {
   showModalBottomSheet(
     context: context,
+    useRootNavigator: true,
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
     ),
@@ -235,6 +261,7 @@ class _QuickAddSheetState extends State<_QuickAddSheet> {
                 showModalBottomSheet(
                   context: context,
                   isScrollControlled: true,
+                  useRootNavigator: true,
                   shape: const RoundedRectangleBorder(
                     borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
                   ),
@@ -256,6 +283,7 @@ class _QuickAddSheetState extends State<_QuickAddSheet> {
                 showModalBottomSheet(
                   context: context,
                   isScrollControlled: true,
+                  useRootNavigator: true,
                   shape: const RoundedRectangleBorder(
                     borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
                   ),
@@ -274,7 +302,7 @@ class _QuickAddSheetState extends State<_QuickAddSheet> {
               trailing: const Icon(Icons.chevron_right_rounded),
               onTap: () {
                 Navigator.pop(context);
-                Navigator.of(context).push(
+                Navigator.of(context, rootNavigator: true).push(
                   MaterialPageRoute(builder: (_) => const AddShiftScreen()),
                 );
               },
