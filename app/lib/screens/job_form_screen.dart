@@ -27,6 +27,7 @@ class _JobFormScreenState extends State<JobFormScreen> {
   final _paydayController = TextEditingController(text: '5');
   final _laborInsuranceController = TextEditingController(text: '0');
   final _healthInsuranceController = TextEditingController(text: '0');
+  final _welfareController = TextEditingController(text: '0');
 
   Color _selectedColor = jobColorPalette.first;
   PayType _payType = PayType.hourly;
@@ -45,6 +46,7 @@ class _JobFormScreenState extends State<JobFormScreen> {
         payday: int.tryParse(_paydayController.text),
         laborInsuranceFee: double.tryParse(_laborInsuranceController.text) ?? 0,
         healthInsuranceFee: double.tryParse(_healthInsuranceController.text) ?? 0,
+        welfareFee: double.tryParse(_welfareController.text) ?? 0,
       );
       if (mounted) Navigator.pop(context, job);
     } catch (e) {
@@ -64,6 +66,7 @@ class _JobFormScreenState extends State<JobFormScreen> {
     _paydayController.dispose();
     _laborInsuranceController.dispose();
     _healthInsuranceController.dispose();
+    _welfareController.dispose();
     super.dispose();
   }
 
@@ -145,6 +148,12 @@ class _JobFormScreenState extends State<JobFormScreen> {
                 ),
               ),
             ],
+          ),
+          const SizedBox(height: 16),
+          TextField(
+            controller: _welfareController,
+            keyboardType: TextInputType.number,
+            decoration: const InputDecoration(labelText: '福利金', prefixText: '\$ '),
           ),
           const SizedBox(height: 32),
           FilledButton(

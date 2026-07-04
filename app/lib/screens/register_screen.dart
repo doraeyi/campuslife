@@ -14,6 +14,7 @@ class RegisterScreen extends HookConsumerWidget {
     final emailCtrl    = useTextEditingController();
     final passwordCtrl = useTextEditingController();
     final isLoading    = useState(false);
+    final isGoogleLoading = useState(false);
     final errorMsg     = useState<String?>(null);
 
     Future<void> submit() async {
@@ -39,6 +40,21 @@ class RegisterScreen extends HookConsumerWidget {
         errorMsg.value = e.toString().replaceFirst('Exception: ', '');
       } finally {
         isLoading.value = false;
+      }
+    }
+
+    Future<void> submitWithGoogle() async {
+      isGoogleLoading.value = true;
+      errorMsg.value = null;
+
+      try {
+        // Google 登入沒有帳號時會自動建立，註冊/登入共用同一支後端邏輯
+        await ref.read(authProvider.notifier).loginWithGoogle();
+        if (context.mounted) context.go('/dashboard');
+      } catch (e) {
+        errorMsg.value = e.toString().replaceFirst('Exception: ', '');
+      } finally {
+        isGoogleLoading.value = false;
       }
     }
 
@@ -104,6 +120,58 @@ class RegisterScreen extends HookConsumerWidget {
                         ),
                       )
                     : const Text('註冊'),
+              ),
+              const SizedBox(height: 24),
+              Row(
+                children: [
+                  Expanded(child: Divider(color: Colors.grey.shade300)),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: Text('或', style: TextStyle(color: Colors.grey.shade500)),
+                  ),
+                  Expanded(child: Divider(color: Colors.grey.shade300)),
+                ],
+              ),
+              const SizedBox(height: 24),
+              SizedBox(
+                height: 48,
+                child: OutlinedButton(
+                  onPressed: isGoogleLoading.value ? null : submitWithGoogle,
+                  style: OutlinedButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    side: BorderSide(color: Colors.grey.shade300),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                  child: isGoogleLoading.value
+                      ? const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Text(
+                              'G',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF4285F4),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Text(
+                              '使用 Google 帳號登入',
+                              style: TextStyle(
+                                color: Colors.grey.shade800,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                ),
               ),
             ],
           ),

@@ -18,6 +18,11 @@ const shiftPresets = [
 String fmtTime(TimeOfDay t) =>
     '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}:00';
 
+TimeOfDay _parseTime(String hhmmss) {
+  final parts = hhmmss.split(':');
+  return TimeOfDay(hour: int.parse(parts[0]), minute: int.parse(parts[1]));
+}
+
 class DayBottomSheet extends StatefulWidget {
   const DayBottomSheet({
     super.key,
@@ -357,24 +362,48 @@ class _BatchAddSheetState extends State<BatchAddSheet> {
             const SizedBox(height: 16),
             const Text('班別', style: TextStyle(fontWeight: FontWeight.w600)),
             const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: shiftPresets.map((p) {
-                final selected = _shiftType == p.label;
-                final chipColor = colorForShiftType(p.label) ?? Colors.grey;
-                return ChoiceChip(
-                  label: Text(p.label, style: TextStyle(color: selected ? Colors.white : null)),
-                  selected: selected,
-                  selectedColor: chipColor,
-                  onSelected: (_) => setState(() {
-                    _shiftType = p.label;
-                    _start = p.start;
-                    _end = p.end;
-                  }),
+            Builder(builder: (context) {
+              final jobPresets = _job?.presets ?? [];
+              if (jobPresets.isNotEmpty) {
+                return Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: jobPresets.map((p) {
+                    final selected = _shiftType == p.label;
+                    final chipColor = _job?.color ?? Colors.grey;
+                    return ChoiceChip(
+                      label: Text('${p.label}  ${p.displayStart}-${p.displayEnd}',
+                          style: TextStyle(color: selected ? Colors.white : null)),
+                      selected: selected,
+                      selectedColor: chipColor,
+                      onSelected: (_) => setState(() {
+                        _shiftType = p.label;
+                        _start = _parseTime(p.startTime);
+                        _end = _parseTime(p.endTime);
+                      }),
+                    );
+                  }).toList(),
                 );
-              }).toList(),
-            ),
+              }
+              return Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: shiftPresets.map((p) {
+                  final selected = _shiftType == p.label;
+                  final chipColor = colorForShiftType(p.label) ?? Colors.grey;
+                  return ChoiceChip(
+                    label: Text(p.label, style: TextStyle(color: selected ? Colors.white : null)),
+                    selected: selected,
+                    selectedColor: chipColor,
+                    onSelected: (_) => setState(() {
+                      _shiftType = p.label;
+                      _start = p.start;
+                      _end = p.end;
+                    }),
+                  );
+                }).toList(),
+              );
+            }),
             if (widget.jobs.isNotEmpty) ...[
               const SizedBox(height: 12),
               const Text('工作', style: TextStyle(fontWeight: FontWeight.w600)),
@@ -389,7 +418,10 @@ class _BatchAddSheetState extends State<BatchAddSheet> {
                     selectedColor: j.color,
                     labelStyle: TextStyle(color: selected ? Colors.white : null),
                     avatar: CircleAvatar(backgroundColor: j.color, radius: 6),
-                    onSelected: (_) => setState(() => _job = j),
+                    onSelected: (_) => setState(() {
+                      _job = j;
+                      _shiftType = null;
+                    }),
                   );
                 }).toList(),
               ),

@@ -90,6 +90,7 @@ class ApiClient {
     int? payday,
     double laborInsuranceFee = 0,
     double healthInsuranceFee = 0,
+    double welfareFee = 0,
   }) async {
     final response = await http.post(
       Uri.parse('$baseUrl/jobs'),
@@ -103,6 +104,7 @@ class ApiClient {
         'payday': payday,
         'labor_insurance_fee': laborInsuranceFee,
         'health_insurance_fee': healthInsuranceFee,
+        'welfare_fee': welfareFee,
       }),
     );
     if (response.statusCode != 200) throw Exception('Failed to create job: ${response.statusCode}');
@@ -119,6 +121,7 @@ class ApiClient {
     int? payday,
     double laborInsuranceFee = 0,
     double healthInsuranceFee = 0,
+    double welfareFee = 0,
   }) async {
     final response = await http.put(
       Uri.parse('$baseUrl/jobs/$id'),
@@ -132,6 +135,7 @@ class ApiClient {
         'payday': payday,
         'labor_insurance_fee': laborInsuranceFee,
         'health_insurance_fee': healthInsuranceFee,
+        'welfare_fee': welfareFee,
       }),
     );
     if (response.statusCode != 200) throw Exception('更新工作失敗');

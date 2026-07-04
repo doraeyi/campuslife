@@ -12,6 +12,7 @@ class JobBase(BaseModel):
     payday: int | None = None
     labor_insurance_fee: float = 0
     health_insurance_fee: float = 0
+    welfare_fee: float = 0
 
 
 class JobCreate(JobBase):
@@ -44,6 +45,15 @@ class JobRead(JobBase):
     presets: list[ShiftPresetRead] = []
 
 
+class JobPublicRead(BaseModel):
+    """Job info safe to expose to friends/group-share viewers — no pay/insurance fields."""
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    color: str
+
+
 class ShiftBase(BaseModel):
     date: date
     start_time: time
@@ -62,6 +72,13 @@ class ShiftRead(ShiftBase):
 
     id: int
     job: JobRead | None = None
+
+
+class ShiftFriendRead(ShiftBase):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    job: JobPublicRead | None = None
 
 
 class IncomeCreate(BaseModel):
@@ -94,6 +111,11 @@ class UserCreate(BaseModel):
 class UserLogin(BaseModel):
     email: EmailStr
     password: str
+
+
+class GoogleAuthPayload(BaseModel):
+    id_token: str | None = None
+    access_token: str | None = None
 
 
 class UserRead(BaseModel):
@@ -257,5 +279,5 @@ class GroupShiftRead(BaseModel):
     end_time: time
     shift_type: str | None = None
     note: str | None = None
-    job: JobRead | None = None
+    job: JobPublicRead | None = None
     owner: UserRead

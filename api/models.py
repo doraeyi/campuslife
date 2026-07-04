@@ -33,6 +33,7 @@ class Job(Base):
     payday = Column(Integer, nullable=True)
     labor_insurance_fee = Column(Float, nullable=False, default=0)
     health_insurance_fee = Column(Float, nullable=False, default=0)
+    welfare_fee = Column(Float, nullable=False, default=0)
     created_at = Column(DateTime, server_default=func.now())
 
     presets = relationship(

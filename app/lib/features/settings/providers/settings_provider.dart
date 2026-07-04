@@ -121,6 +121,7 @@ class SettingsJobsNotifier extends AsyncNotifier<List<Job>> {
     int? payday,
     double laborInsuranceFee = 0,
     double healthInsuranceFee = 0,
+    double welfareFee = 0,
   }) async {
     final job = await ApiClient().createJob(
       name: name,
@@ -131,6 +132,7 @@ class SettingsJobsNotifier extends AsyncNotifier<List<Job>> {
       payday: payday,
       laborInsuranceFee: laborInsuranceFee,
       healthInsuranceFee: healthInsuranceFee,
+      welfareFee: welfareFee,
     );
     state = state.whenData((list) => [...list, job]);
   }
@@ -144,6 +146,7 @@ class SettingsJobsNotifier extends AsyncNotifier<List<Job>> {
     int? payday,
     double laborInsuranceFee = 0,
     double healthInsuranceFee = 0,
+    double welfareFee = 0,
   }) async {
     final updated = await ApiClient().updateJob(
       id,
@@ -155,6 +158,7 @@ class SettingsJobsNotifier extends AsyncNotifier<List<Job>> {
       payday: payday,
       laborInsuranceFee: laborInsuranceFee,
       healthInsuranceFee: healthInsuranceFee,
+      welfareFee: welfareFee,
     );
     state = state.whenData((list) => list.map((j) => j.id == id ? updated : j).toList());
   }

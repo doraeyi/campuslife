@@ -36,6 +36,7 @@ class Job {
   final int? payday;
   final double laborInsuranceFee;
   final double healthInsuranceFee;
+  final double welfareFee;
   final List<ShiftPreset> presets;
 
   Job({
@@ -48,6 +49,7 @@ class Job {
     this.payday,
     this.laborInsuranceFee = 0,
     this.healthInsuranceFee = 0,
+    this.welfareFee = 0,
     this.presets = const [],
   });
 
@@ -62,6 +64,7 @@ class Job {
       payday: json['payday'] as int?,
       laborInsuranceFee: (json['labor_insurance_fee'] as num?)?.toDouble() ?? 0,
       healthInsuranceFee: (json['health_insurance_fee'] as num?)?.toDouble() ?? 0,
+      welfareFee: (json['welfare_fee'] as num?)?.toDouble() ?? 0,
       presets: (json['presets'] as List<dynamic>? ?? [])
           .map((p) => ShiftPreset.fromJson(p as Map<String, dynamic>))
           .toList(),

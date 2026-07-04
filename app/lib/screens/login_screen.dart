@@ -5,6 +5,11 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../providers/auth_provider.dart';
 
+const _kOrange = Color(0xFFF5A623);
+const _kSubtitleBlue = Color(0xFF6C63FF);
+const _kFieldFill = Color(0xFFF1F2F5);
+const _kBackground = Color(0xFFF5F5F7);
+
 class LoginScreen extends HookConsumerWidget {
   const LoginScreen({super.key});
 
@@ -13,13 +18,14 @@ class LoginScreen extends HookConsumerWidget {
     final emailCtrl    = useTextEditingController();
     final passwordCtrl = useTextEditingController();
     final isLoading    = useState(false);
+    final isGoogleLoading = useState(false);
     final errorMsg     = useState<String?>(null);
 
     Future<void> submit() async {
       final email    = emailCtrl.text.trim();
       final password = passwordCtrl.text;
       if (email.isEmpty || password.isEmpty) {
-        errorMsg.value = '請填寫 Email 和密碼';
+        errorMsg.value = '請填寫帳號和密碼';
         return;
       }
 
@@ -39,80 +45,227 @@ class LoginScreen extends HookConsumerWidget {
       }
     }
 
+    Future<void> submitWithGoogle() async {
+      isGoogleLoading.value = true;
+      errorMsg.value = null;
+
+      try {
+        await ref.read(authProvider.notifier).loginWithGoogle();
+        if (context.mounted) context.go('/dashboard');
+      } catch (e) {
+        errorMsg.value = e.toString().replaceFirst('Exception: ', '');
+      } finally {
+        isGoogleLoading.value = false;
+      }
+    }
+
     return Scaffold(
+      backgroundColor: _kBackground,
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(
-                  Icons.calendar_month,
-                  size: 56,
-                  color: Theme.of(context).colorScheme.primary,
-                ),
+                Image.asset('assets/images/logo.png', width: 220, fit: BoxFit.contain),
                 const SizedBox(height: 12),
-                Text(
-                  'CampusLife',
-                  style: Theme.of(context).textTheme.headlineSmall,
+                const Text(
+                  '登入你的帳號',
+                  style: TextStyle(color: _kSubtitleBlue, fontSize: 14),
                 ),
-                const SizedBox(height: 32),
-                TextField(
-                  controller: emailCtrl,
-                  keyboardType: TextInputType.emailAddress,
-                  textInputAction: TextInputAction.next,
-                  decoration: const InputDecoration(
-                    labelText: 'Email',
-                    prefixIcon: Icon(Icons.email_outlined),
+                const SizedBox(height: 28),
+                Container(
+                  padding: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(24),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.05),
+                        blurRadius: 20,
+                        offset: const Offset(0, 8),
+                      ),
+                    ],
                   ),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: passwordCtrl,
-                  obscureText: true,
-                  textInputAction: TextInputAction.done,
-                  onSubmitted: (_) => submit(),
-                  decoration: const InputDecoration(
-                    labelText: '密碼',
-                    prefixIcon: Icon(Icons.lock_outline),
-                  ),
-                ),
-                if (errorMsg.value != null) ...[
-                  const SizedBox(height: 12),
-                  Text(
-                    errorMsg.value!,
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.error,
-                    ),
-                  ),
-                ],
-                const SizedBox(height: 24),
-                FilledButton(
-                  onPressed: isLoading.value ? null : submit,
-                  style: FilledButton.styleFrom(
-                    minimumSize: const Size.fromHeight(48),
-                  ),
-                  child: isLoading.value
-                      ? const SizedBox(
-                          height: 20,
-                          width: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('帳號', style: TextStyle(fontWeight: FontWeight.w600)),
+                      const SizedBox(height: 8),
+                      _LoginTextField(
+                        controller: emailCtrl,
+                        hintText: '輸入帳號',
+                        keyboardType: TextInputType.emailAddress,
+                        textInputAction: TextInputAction.next,
+                      ),
+                      const SizedBox(height: 20),
+                      const Text('密碼', style: TextStyle(fontWeight: FontWeight.w600)),
+                      const SizedBox(height: 8),
+                      _LoginTextField(
+                        controller: passwordCtrl,
+                        hintText: '輸入密碼',
+                        obscureText: true,
+                        textInputAction: TextInputAction.done,
+                        onSubmitted: (_) => submit(),
+                      ),
+                      if (errorMsg.value != null) ...[
+                        const SizedBox(height: 12),
+                        Text(
+                          errorMsg.value!,
+                          style: TextStyle(color: Theme.of(context).colorScheme.error),
+                        ),
+                      ],
+                      const SizedBox(height: 24),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 48,
+                        child: FilledButton(
+                          onPressed: isLoading.value ? null : submit,
+                          style: FilledButton.styleFrom(
+                            backgroundColor: _kOrange,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
                           ),
-                        )
-                      : const Text('登入'),
+                          child: isLoading.value
+                              ? const SizedBox(
+                                  height: 20,
+                                  width: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.white,
+                                  ),
+                                )
+                              : const Text('登入', style: TextStyle(fontWeight: FontWeight.w600)),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-                const SizedBox(height: 12),
-                TextButton(
-                  // push 而非 go，讓返回鍵可以回到登入頁
-                  onPressed: () => context.push('/register'),
-                  child: const Text('還沒有帳號？註冊'),
+                const SizedBox(height: 24),
+                Row(
+                  children: [
+                    Expanded(child: Divider(color: Colors.grey.shade300)),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      child: Text('或', style: TextStyle(color: Colors.grey.shade500)),
+                    ),
+                    Expanded(child: Divider(color: Colors.grey.shade300)),
+                  ],
+                ),
+                const SizedBox(height: 24),
+                SizedBox(
+                  width: double.infinity,
+                  height: 48,
+                  child: OutlinedButton(
+                    onPressed: isGoogleLoading.value ? null : submitWithGoogle,
+                    style: OutlinedButton.styleFrom(
+                      backgroundColor: Colors.white,
+                      side: BorderSide(color: Colors.grey.shade300),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                    child: isGoogleLoading.value
+                        ? const SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const _GoogleG(),
+                              const SizedBox(width: 10),
+                              Text(
+                                '使用 Google 帳號登入',
+                                style: TextStyle(
+                                  color: Colors.grey.shade800,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text('還沒有帳號？', style: TextStyle(color: Colors.grey.shade600)),
+                    TextButton(
+                      // push 而非 go，讓返回鍵可以回到登入頁
+                      onPressed: () => context.push('/register'),
+                      style: TextButton.styleFrom(foregroundColor: _kOrange),
+                      child: const Text('註冊', style: TextStyle(fontWeight: FontWeight.w600)),
+                    ),
+                  ],
                 ),
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _LoginTextField extends StatelessWidget {
+  const _LoginTextField({
+    required this.controller,
+    required this.hintText,
+    this.obscureText = false,
+    this.keyboardType,
+    this.textInputAction,
+    this.onSubmitted,
+  });
+
+  final TextEditingController controller;
+  final String hintText;
+  final bool obscureText;
+  final TextInputType? keyboardType;
+  final TextInputAction? textInputAction;
+  final ValueChanged<String>? onSubmitted;
+
+  @override
+  Widget build(BuildContext context) {
+    return TextField(
+      controller: controller,
+      obscureText: obscureText,
+      keyboardType: keyboardType,
+      textInputAction: textInputAction,
+      onSubmitted: onSubmitted,
+      decoration: InputDecoration(
+        hintText: hintText,
+        filled: true,
+        fillColor: _kFieldFill,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide.none,
+        ),
+      ),
+    );
+  }
+}
+
+class _GoogleG extends StatelessWidget {
+  const _GoogleG();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 22,
+      height: 22,
+      alignment: Alignment.center,
+      child: const Text(
+        'G',
+        style: TextStyle(
+          fontSize: 18,
+          fontWeight: FontWeight.bold,
+          color: Color(0xFF4285F4),
         ),
       ),
     );

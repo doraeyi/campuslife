@@ -43,7 +43,7 @@ SalaryBreakdown calculateSalary({
   required List<Shift> shiftsInMonth,
   required Job job,
 }) {
-  final insurance = job.laborInsuranceFee + job.healthInsuranceFee;
+  final insurance = job.laborInsuranceFee + job.healthInsuranceFee + job.welfareFee;
 
   if (job.payType == PayType.monthly) {
     final holidayShifts = shiftsInMonth.where((s) => holidayNameFor(s.date) != null).toList();

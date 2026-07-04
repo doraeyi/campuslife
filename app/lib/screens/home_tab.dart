@@ -99,6 +99,7 @@ class _HomeTabState extends ConsumerState<HomeTab> {
     final added = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
+      useRootNavigator: true,
       backgroundColor: Colors.transparent,
       builder: (_) => AddTransactionSheet(cards: _cards),
     );

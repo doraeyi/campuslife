@@ -38,7 +38,7 @@ def list_shifts(
     )
 
 
-@router.get("/friend/{friend_id}", response_model=list[schemas.ShiftRead])
+@router.get("/friend/{friend_id}", response_model=list[schemas.ShiftFriendRead])
 def list_friend_shifts(
     friend_id: int,
     current_user: models.User = Depends(get_current_user),

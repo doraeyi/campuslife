@@ -138,6 +138,7 @@ class ScheduleScreenState extends State<ScheduleScreen> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      useRootNavigator: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
@@ -160,6 +161,7 @@ class ScheduleScreenState extends State<ScheduleScreen> {
     await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      useRootNavigator: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
@@ -510,6 +512,7 @@ class _CalendarCard extends StatelessWidget {
               : _dateOnly(day) == selectedDay,
           onPageChanged: onPageChanged,
           rowHeight: 62,
+          daysOfWeekHeight: 40,
           headerVisible: false,
           calendarStyle: const CalendarStyle(
             // Suppress default decorations; custom builders handle everything
@@ -598,8 +601,10 @@ class _DayCell extends StatelessWidget {
 
     // Determine number color
     Color numColor;
-    if (isToday || isSelected) {
+    if (isToday) {
       numColor = Colors.white;
+    } else if (isSelected) {
+      numColor = colorScheme.onPrimary;
     } else if (isOutside) {
       numColor = colorScheme.outline.withValues(alpha: 0.28);
     } else if (isHoliday || isSun) {
@@ -950,6 +955,7 @@ class _SalaryCardState extends State<_SalaryCard> {
       await showModalBottomSheet<void>(
         context: context,
         isScrollControlled: true,
+        useRootNavigator: true,
         backgroundColor: Colors.transparent,
         builder: (_) => AddTransactionSheet(
           cards: cards,
@@ -1080,7 +1086,7 @@ class _SalaryCardState extends State<_SalaryCard> {
                   ),
                   Expanded(
                     child: _AmountColumn(
-                      label: '勞健保',
+                      label: '扣款',
                       amount: -breakdown.insuranceDeduction,
                       color: _kHolidayRed,
                     ),

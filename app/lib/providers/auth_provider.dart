@@ -24,6 +24,11 @@ class AuthNotifier extends AsyncNotifier<AppUser?> {
     );
   }
 
+  Future<void> loginWithGoogle() async {
+    state = const AsyncLoading();
+    state = await AsyncValue.guard(() => AuthService().loginWithGoogle());
+  }
+
   Future<void> register({
     required String email,
     required String password,

@@ -53,6 +53,8 @@ class JobFormSheet extends HookConsumerWidget {
         text: isEditing ? job!.laborInsuranceFee.toStringAsFixed(0) : '0');
     final healthCtrl = useTextEditingController(
         text: isEditing ? job!.healthInsuranceFee.toStringAsFixed(0) : '0');
+    final welfareCtrl = useTextEditingController(
+        text: isEditing ? job!.welfareFee.toStringAsFixed(0) : '0');
 
     final selectedColor = useState(isEditing ? colorToHex(job!.color) : _kJobColors.first);
     final payType = useState(job?.payType ?? PayType.hourly);
@@ -79,6 +81,7 @@ class JobFormSheet extends HookConsumerWidget {
         final payday = int.tryParse(paydayCtrl.text.trim());
         final labor = double.tryParse(laborCtrl.text.trim()) ?? 0;
         final health = double.tryParse(healthCtrl.text.trim()) ?? 0;
+        final welfare = double.tryParse(welfareCtrl.text.trim()) ?? 0;
 
         if (isEditing) {
           await notifier.updateJob(
@@ -90,6 +93,7 @@ class JobFormSheet extends HookConsumerWidget {
             payday: payday,
             laborInsuranceFee: labor,
             healthInsuranceFee: health,
+            welfareFee: welfare,
           );
         } else {
           await notifier.addJob(
@@ -100,6 +104,7 @@ class JobFormSheet extends HookConsumerWidget {
             payday: payday,
             laborInsuranceFee: labor,
             healthInsuranceFee: health,
+            welfareFee: welfare,
           );
         }
         if (context.mounted) Navigator.of(context).pop();
@@ -251,6 +256,14 @@ class JobFormSheet extends HookConsumerWidget {
                   ),
                 ),
               ],
+            ),
+            const SizedBox(height: 16),
+
+            // 福利金
+            TextField(
+              controller: welfareCtrl,
+              keyboardType: TextInputType.number,
+              decoration: _inputDeco('福利金', prefix: '\$ '),
             ),
             const SizedBox(height: 24),
 
