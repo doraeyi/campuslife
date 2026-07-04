@@ -1,7 +1,10 @@
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:timezone/data/latest_all.dart' as tz_data;
+import 'package:timezone/timezone.dart' as tz;
 
 import '../models/card_model.dart';
 import '../models/job.dart';
+import '../models/shift.dart';
 
 class NotificationService {
   static final NotificationService _instance = NotificationService._();
@@ -17,9 +20,24 @@ class NotificationService {
     presentSound: true,
   );
 
+  static const _shiftReminderDetails = NotificationDetails(
+    android: AndroidNotificationDetails(
+      'shift_reminder',
+      '上班提醒',
+      channelDescription: '班次開始前一小時的提醒通知',
+      importance: Importance.high,
+      priority: Priority.high,
+    ),
+    iOS: _iosDetails,
+  );
+
   Future<void> init() async {
     if (_initialized) return;
+    tz_data.initializeTimeZones();
+    tz.setLocalLocation(tz.getLocation('Asia/Taipei'));
+
     const settings = InitializationSettings(
+      android: AndroidInitializationSettings('@mipmap/ic_launcher'),
       iOS: DarwinInitializationSettings(
         requestAlertPermission: true,
         requestBadgePermission: true,
@@ -27,7 +45,50 @@ class NotificationService {
       ),
     );
     await _plugin.initialize(settings);
+    await _plugin
+        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+        ?.requestNotificationsPermission();
     _initialized = true;
+  }
+
+  // 班次開始前一小時提醒（例如 15:00 上班 → 14:00 通知）
+  Future<void> scheduleShiftReminders(List<Shift> shifts) async {
+    final now = tz.TZDateTime.now(tz.local);
+    for (final shift in shifts) {
+      final start = _shiftStart(shift);
+      final remindAt = start.subtract(const Duration(hours: 1));
+      if (remindAt.isBefore(now)) continue;
+
+      final jobName = shift.job?.name;
+      await _plugin.zonedSchedule(
+        _shiftNotificationId(shift.id),
+        '⏰ 上班提醒',
+        '${start.hour.toString().padLeft(2, '0')}:${start.minute.toString().padLeft(2, '0')}'
+            '${jobName != null ? ' $jobName' : ''} 要上班了',
+        remindAt,
+        _shiftReminderDetails,
+        androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+        uiLocalNotificationDateInterpretation:
+            UILocalNotificationDateInterpretation.absoluteTime,
+      );
+    }
+  }
+
+  Future<void> cancelShiftReminder(int shiftId) =>
+      _plugin.cancel(_shiftNotificationId(shiftId));
+
+  int _shiftNotificationId(int shiftId) => 1000000 + shiftId;
+
+  tz.TZDateTime _shiftStart(Shift shift) {
+    final parts = shift.startTime.split(':');
+    return tz.TZDateTime(
+      tz.local,
+      shift.date.year,
+      shift.date.month,
+      shift.date.day,
+      int.parse(parts[0]),
+      int.parse(parts[1]),
+    );
   }
 
   // 信用卡還款日：card.paymentDueDate 儲存每月幾號（e.g. "25"）

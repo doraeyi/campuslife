@@ -5,6 +5,7 @@ import '../data/taiwan_holidays_2026.dart';
 import '../models/job.dart';
 import '../models/shift.dart';
 import '../services/api_client.dart';
+import '../services/notification_service.dart';
 import 'add_shift_screen.dart';
 
 const shiftPresets = [
@@ -56,6 +57,7 @@ class _DayBottomSheetState extends State<DayBottomSheet> {
   Future<void> _deleteShift(int shiftId) async {
     try {
       await _apiClient.deleteShift(shiftId);
+      await NotificationService().cancelShiftReminder(shiftId);
       widget.onAdded();
       if (mounted) Navigator.pop(context);
     } catch (e) {

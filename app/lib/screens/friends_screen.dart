@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 import '../models/user.dart';
 import '../services/api_client.dart';
-import 'friend_schedule_screen.dart';
 
 class FriendsScreen extends StatefulWidget {
   const FriendsScreen({super.key});
@@ -111,14 +111,9 @@ class _FriendsScreenState extends State<FriendsScreen> {
                           title: Text(f.friend.displayName),
                           subtitle: Text(f.friend.email),
                           trailing: const Icon(Icons.chevron_right_rounded),
-                          onTap: () => Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => FriendScheduleScreen(
-                                friendId: f.friend.id,
-                                friendName: f.friend.displayName,
-                              ),
-                            ),
+                          onTap: () => context.push(
+                            '/friends/${f.friend.id}/schedule',
+                            extra: f.friend.displayName,
                           ),
                         );
                       }

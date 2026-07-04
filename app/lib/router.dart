@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'features/settings/profile_page.dart';
 import 'features/settings/settings_page.dart';
 import 'screens/app_scaffold.dart';
+import 'screens/friend_schedule_screen.dart';
 import 'screens/friends_screen.dart';
 import 'screens/home_tab.dart';
 import 'screens/income_tab.dart';
@@ -57,6 +58,18 @@ final appRouter = GoRouter(
         GoRoute(
           path: '/friends',
           pageBuilder: (_, __) => const NoTransitionPage(child: FriendsScreen()),
+          routes: [
+            GoRoute(
+              path: ':friendId/schedule',
+              pageBuilder: (context, state) {
+                final friendId = int.parse(state.pathParameters['friendId']!);
+                final friendName = state.extra as String? ?? '好友';
+                return NoTransitionPage(
+                  child: FriendScheduleScreen(friendId: friendId, friendName: friendName),
+                );
+              },
+            ),
+          ],
         ),
         GoRoute(
           path: '/wallet',

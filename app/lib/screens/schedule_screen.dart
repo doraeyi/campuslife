@@ -79,6 +79,7 @@ class ScheduleScreenState extends State<ScheduleScreen> {
         map.putIfAbsent(day, () => []).add(shift);
       }
       setState(() => _shiftsByDate = map);
+      NotificationService().scheduleShiftReminders(shifts);
     });
   }
 
