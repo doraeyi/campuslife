@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/card_model.dart';
+import '../models/friend_shift.dart';
 import '../models/group_shift.dart';
 import '../models/income.dart';
 import '../models/job.dart';
@@ -33,14 +34,14 @@ class ApiClient {
     return data.map((json) => Shift.fromJson(json)).toList();
   }
 
-  Future<List<Shift>> fetchFriendShifts(int friendUserId) async {
+  Future<List<FriendShift>> fetchFriendShifts(int friendUserId) async {
     final response = await http.get(
       Uri.parse('$baseUrl/schedule/friend/$friendUserId'),
       headers: await _authHeaders(),
     );
     if (response.statusCode != 200) throw Exception('Failed to load friend shifts: ${response.statusCode}');
     final List<dynamic> data = jsonDecode(response.body);
-    return data.map((json) => Shift.fromJson(json)).toList();
+    return data.map((json) => FriendShift.fromJson(json)).toList();
   }
 
   Future<void> createShift({

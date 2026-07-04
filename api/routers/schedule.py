@@ -47,9 +47,25 @@ def list_friend_shifts(
     if not _are_friends(db, current_user.id, friend_id):
         raise HTTPException(status_code=403, detail="不是好友,無法查看班表")
 
+    # 只回傳對方「明確分享給我」的那些工作的班表，不是對方所有工作的班表。
+    shared_job_ids = [
+        row.job_id
+        for row in db.query(models.JobShare)
+        .filter(
+            models.JobShare.owner_id == friend_id,
+            models.JobShare.shared_with_id == current_user.id,
+        )
+        .all()
+    ]
+    if not shared_job_ids:
+        return []
+
     return (
         db.query(models.Shift)
-        .filter(models.Shift.user_id == friend_id)
+        .filter(
+            models.Shift.user_id == friend_id,
+            models.Shift.job_id.in_(shared_job_ids),
+        )
         .order_by(models.Shift.date)
         .all()
     )

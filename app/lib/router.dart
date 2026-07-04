@@ -41,10 +41,6 @@ final appRouter = GoRouter(
       path: '/settings/profile',
       builder: (_, __) => const ProfilePage(),
     ),
-    GoRoute(
-      path: '/friends',
-      builder: (_, __) => const FriendsScreen(),
-    ),
 
     // ── Main shell ──────────────────────────────────────────────────────
     ShellRoute(
@@ -57,6 +53,10 @@ final appRouter = GoRouter(
         GoRoute(
           path: '/schedule',
           pageBuilder: (_, __) => const NoTransitionPage(child: ScheduleScreen()),
+        ),
+        GoRoute(
+          path: '/friends',
+          pageBuilder: (_, __) => const NoTransitionPage(child: FriendsScreen()),
         ),
         GoRoute(
           path: '/wallet',

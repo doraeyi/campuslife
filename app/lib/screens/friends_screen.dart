@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/user.dart';
 import '../services/api_client.dart';
+import 'friend_schedule_screen.dart';
 
 class FriendsScreen extends StatefulWidget {
   const FriendsScreen({super.key});
@@ -109,7 +110,16 @@ class _FriendsScreenState extends State<FriendsScreen> {
                           leading: const CircleAvatar(child: Icon(Icons.person)),
                           title: Text(f.friend.displayName),
                           subtitle: Text(f.friend.email),
-                          trailing: const Icon(Icons.check_circle, color: Colors.green),
+                          trailing: const Icon(Icons.chevron_right_rounded),
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => FriendScheduleScreen(
+                                friendId: f.friend.id,
+                                friendName: f.friend.displayName,
+                              ),
+                            ),
+                          ),
                         );
                       }
                       return ListTile(
