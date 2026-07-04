@@ -17,6 +17,12 @@ class RegisterScreen extends HookConsumerWidget {
     final isGoogleLoading = useState(false);
     final errorMsg     = useState<String?>(null);
 
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final cardColor = isDark ? const Color(0xFF232329) : Colors.white;
+    final dividerColor = isDark ? Colors.white24 : Colors.grey.shade300;
+    final mutedText = isDark ? Colors.grey.shade400 : Colors.grey.shade500;
+
     Future<void> submit() async {
       final name     = nameCtrl.text.trim();
       final email    = emailCtrl.text.trim();
@@ -124,12 +130,12 @@ class RegisterScreen extends HookConsumerWidget {
               const SizedBox(height: 24),
               Row(
                 children: [
-                  Expanded(child: Divider(color: Colors.grey.shade300)),
+                  Expanded(child: Divider(color: dividerColor)),
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 12),
-                    child: Text('或', style: TextStyle(color: Colors.grey.shade500)),
+                    child: Text('或', style: TextStyle(color: mutedText)),
                   ),
-                  Expanded(child: Divider(color: Colors.grey.shade300)),
+                  Expanded(child: Divider(color: dividerColor)),
                 ],
               ),
               const SizedBox(height: 24),
@@ -138,8 +144,8 @@ class RegisterScreen extends HookConsumerWidget {
                 child: OutlinedButton(
                   onPressed: isGoogleLoading.value ? null : submitWithGoogle,
                   style: OutlinedButton.styleFrom(
-                    backgroundColor: Colors.white,
-                    side: BorderSide(color: Colors.grey.shade300),
+                    backgroundColor: cardColor,
+                    side: BorderSide(color: dividerColor),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(14),
                     ),
@@ -165,7 +171,7 @@ class RegisterScreen extends HookConsumerWidget {
                             Text(
                               '使用 Google 帳號登入',
                               style: TextStyle(
-                                color: Colors.grey.shade800,
+                                color: theme.colorScheme.onSurface,
                                 fontWeight: FontWeight.w500,
                               ),
                             ),

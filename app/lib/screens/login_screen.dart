@@ -7,8 +7,6 @@ import '../providers/auth_provider.dart';
 
 const _kOrange = Color(0xFFF5A623);
 const _kSubtitleBlue = Color(0xFF6C63FF);
-const _kFieldFill = Color(0xFFF1F2F5);
-const _kBackground = Color(0xFFF5F5F7);
 
 class LoginScreen extends HookConsumerWidget {
   const LoginScreen({super.key});
@@ -59,8 +57,14 @@ class LoginScreen extends HookConsumerWidget {
       }
     }
 
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final cardColor = isDark ? const Color(0xFF232329) : Colors.white;
+    final dividerColor = isDark ? Colors.white24 : Colors.grey.shade300;
+    final mutedText = isDark ? Colors.grey.shade400 : Colors.grey.shade600;
+
     return Scaffold(
-      backgroundColor: _kBackground,
+      backgroundColor: theme.scaffoldBackgroundColor,
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
@@ -78,11 +82,11 @@ class LoginScreen extends HookConsumerWidget {
                 Container(
                   padding: const EdgeInsets.all(24),
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: cardColor,
                     borderRadius: BorderRadius.circular(24),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.05),
+                        color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.05),
                         blurRadius: 20,
                         offset: const Offset(0, 8),
                       ),
@@ -147,12 +151,12 @@ class LoginScreen extends HookConsumerWidget {
                 const SizedBox(height: 24),
                 Row(
                   children: [
-                    Expanded(child: Divider(color: Colors.grey.shade300)),
+                    Expanded(child: Divider(color: dividerColor)),
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 12),
-                      child: Text('或', style: TextStyle(color: Colors.grey.shade500)),
+                      child: Text('或', style: TextStyle(color: mutedText)),
                     ),
-                    Expanded(child: Divider(color: Colors.grey.shade300)),
+                    Expanded(child: Divider(color: dividerColor)),
                   ],
                 ),
                 const SizedBox(height: 24),
@@ -162,8 +166,8 @@ class LoginScreen extends HookConsumerWidget {
                   child: OutlinedButton(
                     onPressed: isGoogleLoading.value ? null : submitWithGoogle,
                     style: OutlinedButton.styleFrom(
-                      backgroundColor: Colors.white,
-                      side: BorderSide(color: Colors.grey.shade300),
+                      backgroundColor: cardColor,
+                      side: BorderSide(color: dividerColor),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(14),
                       ),
@@ -182,7 +186,7 @@ class LoginScreen extends HookConsumerWidget {
                               Text(
                                 '使用 Google 帳號登入',
                                 style: TextStyle(
-                                  color: Colors.grey.shade800,
+                                  color: theme.colorScheme.onSurface,
                                   fontWeight: FontWeight.w500,
                                 ),
                               ),
@@ -194,7 +198,7 @@ class LoginScreen extends HookConsumerWidget {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Text('還沒有帳號？', style: TextStyle(color: Colors.grey.shade600)),
+                    Text('還沒有帳號？', style: TextStyle(color: mutedText)),
                     TextButton(
                       // push 而非 go，讓返回鍵可以回到登入頁
                       onPressed: () => context.push('/register'),
@@ -231,6 +235,7 @@ class _LoginTextField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return TextField(
       controller: controller,
       obscureText: obscureText,
@@ -240,7 +245,7 @@ class _LoginTextField extends StatelessWidget {
       decoration: InputDecoration(
         hintText: hintText,
         filled: true,
-        fillColor: _kFieldFill,
+        fillColor: isDark ? const Color(0xFF34343C) : const Color(0xFFF1F2F5),
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),

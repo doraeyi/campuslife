@@ -13,16 +13,26 @@ from database import get_db
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
-GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")  # Web client（後端 / Web 版 App 用）
+GOOGLE_IOS_CLIENT_ID = os.getenv("GOOGLE_IOS_CLIENT_ID")
+GOOGLE_ANDROID_CLIENT_ID = os.getenv("GOOGLE_ANDROID_CLIENT_ID")
+
+# 每個平台（Web / iOS / Android）原生 SDK 簽發的 idToken，aud（受眾）欄位
+# 會是「該平台自己的」OAuth Client ID，不是統一的 Web Client ID，
+# 所以驗證時要接受這一整組合法的 Client ID，不能只認一個。
+_ALLOWED_GOOGLE_AUDIENCES = {
+    cid for cid in (GOOGLE_CLIENT_ID, GOOGLE_IOS_CLIENT_ID, GOOGLE_ANDROID_CLIENT_ID) if cid
+}
 
 
 def _verify_google_id_token(id_token: str) -> dict:
     try:
-        return google_id_token.verify_oauth2_token(
-            id_token, google_requests.Request(), GOOGLE_CLIENT_ID,
-        )
+        idinfo = google_id_token.verify_oauth2_token(id_token, google_requests.Request())
     except ValueError:
         raise HTTPException(status_code=401, detail="Google 驗證失敗")
+    if idinfo.get("aud") not in _ALLOWED_GOOGLE_AUDIENCES:
+        raise HTTPException(status_code=401, detail="Google 驗證失敗（不受信任的用戶端）")
+    return idinfo
 
 
 def _verify_google_access_token(access_token: str) -> dict:
