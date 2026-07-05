@@ -34,6 +34,9 @@ def create_transaction(
     elif tx_type == "income" and amount < 0:
         amount = -amount
 
+    # 貨到付款且尚未付款的交易，先不影響卡片餘額，等標記已付款才計入
+    counts_toward_balance = not payload.is_cod
+
     if payload.card_id is not None:
         card = (
             db.query(models.Card)
@@ -42,16 +45,44 @@ def create_transaction(
         )
         if card is None:
             raise HTTPException(status_code=404, detail="找不到這張卡片")
-        if card.balance is not None:
+        if card.balance is not None and counts_toward_balance:
             card.balance += amount
 
     data = payload.model_dump(exclude={"date", "type", "category_id"})
     data["amount"] = amount
     data["transaction_type"] = tx_type
+    data["cod_paid"] = not payload.is_cod
     if not data.get("description"):
         data["description"] = data.get("note") or ""
     tx = models.Transaction(user_id=current_user.id, **data)
     db.add(tx)
+    db.commit()
+    db.refresh(tx)
+    return tx
+
+
+@router.patch("/{tx_id}/cod-paid", response_model=schemas.TransactionRead)
+def mark_cod_paid(
+    tx_id: int,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    tx = (
+        db.query(models.Transaction)
+        .filter(models.Transaction.id == tx_id, models.Transaction.user_id == current_user.id)
+        .first()
+    )
+    if tx is None:
+        raise HTTPException(status_code=404, detail="找不到這筆交易")
+    if not tx.is_cod or tx.cod_paid:
+        return tx
+
+    tx.cod_paid = True
+    if tx.card_id is not None:
+        card = db.query(models.Card).filter(models.Card.id == tx.card_id).first()
+        if card is not None and card.balance is not None:
+            card.balance += tx.amount
+
     db.commit()
     db.refresh(tx)
     return tx
@@ -72,8 +103,10 @@ def assign_card(
     if tx is None:
         raise HTTPException(status_code=404, detail="找不到這筆交易")
 
+    counts_toward_balance = not tx.is_cod or tx.cod_paid
+
     # Undo balance effect on old card
-    if tx.card_id is not None:
+    if tx.card_id is not None and counts_toward_balance:
         old_card = db.query(models.Card).filter(models.Card.id == tx.card_id).first()
         if old_card and old_card.balance is not None:
             old_card.balance -= tx.amount
@@ -81,7 +114,7 @@ def assign_card(
     tx.card_id = payload.card_id
 
     # Apply balance effect on new card
-    if payload.card_id is not None:
+    if payload.card_id is not None and counts_toward_balance:
         new_card = (
             db.query(models.Card)
             .filter(models.Card.id == payload.card_id, models.Card.user_id == current_user.id)
@@ -108,7 +141,8 @@ def delete_transaction(
     if tx is None:
         raise HTTPException(status_code=404, detail="找不到這筆交易")
 
-    if tx.card_id is not None:
+    counts_toward_balance = not tx.is_cod or tx.cod_paid
+    if tx.card_id is not None and counts_toward_balance:
         card = db.query(models.Card).filter(models.Card.id == tx.card_id).first()
         if card is not None and card.balance is not None:
             card.balance -= tx.amount

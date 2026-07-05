@@ -3,9 +3,9 @@ import 'package:go_router/go_router.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../models/card_model.dart';
+import '../models/transaction.dart';
 import '../services/api_client.dart';
 import 'add_transaction_sheet.dart';
-import 'add_shift_screen.dart';
 
 // ── Design constants ──────────────────────────────────────────────────────────
 const _kActive   = Color(0xFFFBBF24);
@@ -40,7 +40,7 @@ class AppScaffold extends HookConsumerWidget {
       bottomNavigationBar: _FloatingPillNav(
         location: location,
         onNavigate: context.go,
-        onAdd: () => _showQuickAdd(context),
+        onAdd: () => _openQuickAddTransaction(context),
       ),
     );
   }
@@ -189,128 +189,27 @@ class _PillFab extends StatelessWidget {
   }
 }
 
-// ── Quick-add sheet ───────────────────────────────────────────────────────────
-void _showQuickAdd(BuildContext context) {
+// ── Quick-add: 直接開支出/收入 + 數字鍵盤 ───────────────────────────────────────
+Future<void> _openQuickAddTransaction(BuildContext context) async {
+  final api = ApiClient();
+  final results = await Future.wait([
+    api.fetchCards().catchError((_) => <AppCard>[]),
+    api.fetchTransactions().catchError((_) => <Transaction>[]),
+  ]);
+  if (!context.mounted) return;
+  final cards = results[0] as List<AppCard>;
+  final transactions = results[1] as List<Transaction>;
   showModalBottomSheet(
     context: context,
+    isScrollControlled: true,
     useRootNavigator: true,
+    backgroundColor: Colors.transparent,
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
     ),
-    builder: (_) => const _QuickAddSheet(),
+    builder: (_) => AddTransactionSheet(
+      cards: cards,
+      outstandingLoans: outstandingLoans(transactions),
+    ),
   );
-}
-
-class _QuickAddSheet extends StatefulWidget {
-  const _QuickAddSheet();
-
-  @override
-  State<_QuickAddSheet> createState() => _QuickAddSheetState();
-}
-
-class _QuickAddSheetState extends State<_QuickAddSheet> {
-  List<AppCard> _cards = [];
-
-  @override
-  void initState() {
-    super.initState();
-    ApiClient().fetchCards().then((cards) {
-      if (mounted) setState(() => _cards = cards);
-    }).catchError((_) {});
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Center(
-              child: Container(
-                width: 36,
-                height: 4,
-                margin: const EdgeInsets.only(bottom: 12),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.outlineVariant,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
-              child: Text(
-                '快速新增',
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-              ),
-            ),
-            ListTile(
-              contentPadding: const EdgeInsets.symmetric(horizontal: 20),
-              leading: const CircleAvatar(
-                backgroundColor: Color(0xFFEF4444),
-                child: Icon(Icons.arrow_upward_rounded, color: Colors.white),
-              ),
-              title: const Text('記錄支出'),
-              subtitle: const Text('扣除卡片餘額'),
-              trailing: const Icon(Icons.chevron_right_rounded),
-              onTap: () {
-                Navigator.pop(context);
-                showModalBottomSheet(
-                  context: context,
-                  isScrollControlled: true,
-                  useRootNavigator: true,
-                  shape: const RoundedRectangleBorder(
-                    borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-                  ),
-                  builder: (_) => AddTransactionSheet(cards: _cards, prefillType: 'expense'),
-                );
-              },
-            ),
-            ListTile(
-              contentPadding: const EdgeInsets.symmetric(horizontal: 20),
-              leading: const CircleAvatar(
-                backgroundColor: Color(0xFF10B981),
-                child: Icon(Icons.arrow_downward_rounded, color: Colors.white),
-              ),
-              title: const Text('記錄收入'),
-              subtitle: const Text('增加卡片餘額'),
-              trailing: const Icon(Icons.chevron_right_rounded),
-              onTap: () {
-                Navigator.pop(context);
-                showModalBottomSheet(
-                  context: context,
-                  isScrollControlled: true,
-                  useRootNavigator: true,
-                  shape: const RoundedRectangleBorder(
-                    borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-                  ),
-                  builder: (_) => AddTransactionSheet(cards: _cards, prefillType: 'income'),
-                );
-              },
-            ),
-            ListTile(
-              contentPadding: const EdgeInsets.symmetric(horizontal: 20),
-              leading: const CircleAvatar(
-                backgroundColor: Color(0xFF3B82F6),
-                child: Icon(Icons.work_outline_rounded, color: Colors.white),
-              ),
-              title: const Text('新增班次'),
-              subtitle: const Text('記錄一筆工作排班'),
-              trailing: const Icon(Icons.chevron_right_rounded),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.of(context, rootNavigator: true).push(
-                  MaterialPageRoute(builder: (_) => const AddShiftScreen()),
-                );
-              },
-            ),
-            const SizedBox(height: 8),
-          ],
-        ),
-      ),
-    );
-  }
 }

@@ -53,6 +53,11 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
     await _load();
   }
 
+  Future<void> _markCodPaid(Transaction tx) async {
+    await _api.markCodPaid(tx.id);
+    await _load();
+  }
+
   Future<void> _showUpdateBalance(AppCard card) async {
     final ctrl = TextEditingController(
       text: card.balance?.toStringAsFixed(0) ?? '',
@@ -87,10 +92,18 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
   }
 
   Future<void> _showEditCard(AppCard card) async {
+    final isEasycard = card.type == 'easycard';
+    final isCredit = card.type == 'credit';
     final nameCtrl = TextEditingController(text: card.name);
     final bankCtrl = TextEditingController(text: card.bank ?? '');
     final lastFourCtrl = TextEditingController(text: card.lastFour ?? '');
+    final balanceCtrl = TextEditingController(
+        text: card.balance != null ? card.balance!.toStringAsFixed(0) : '');
+    final dueAmountCtrl = TextEditingController(
+        text: card.dueAmount != null ? card.dueAmount!.toStringAsFixed(0) : '');
     final dueDayCtrl = TextEditingController(text: card.paymentDueDate ?? '');
+    final reminderDayCtrl =
+        TextEditingController(text: card.reminderDay?.toString() ?? '');
     String selectedColor = card.color;
 
     final confirmed = await showModalBottomSheet<bool>(
@@ -136,22 +149,47 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
                 decoration: const InputDecoration(labelText: '卡片名稱'),
               ),
               const SizedBox(height: 10),
-              TextField(
-                controller: bankCtrl,
-                decoration: const InputDecoration(labelText: '銀行（選填）'),
-              ),
-              const SizedBox(height: 10),
+              if (!isEasycard) ...[
+                TextField(
+                  controller: bankCtrl,
+                  decoration: const InputDecoration(labelText: '銀行 *'),
+                ),
+                const SizedBox(height: 10),
+              ],
               TextField(
                 controller: lastFourCtrl,
-                decoration: const InputDecoration(labelText: '末四碼（選填）'),
+                decoration: const InputDecoration(labelText: '卡號後四碼 *'),
                 keyboardType: TextInputType.number,
                 maxLength: 4,
               ),
-              if (card.type == 'credit') ...[
+              if (!isCredit) ...[
+                const SizedBox(height: 10),
+                TextField(
+                  controller: balanceCtrl,
+                  decoration: const InputDecoration(labelText: '目前餘額（選填）', prefixText: '\$ '),
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                ),
+              ],
+              if (isCredit) ...[
+                const SizedBox(height: 10),
+                TextField(
+                  controller: dueAmountCtrl,
+                  decoration: const InputDecoration(labelText: '目前需要繳的金額（選填）', prefixText: '\$ '),
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                ),
+                const SizedBox(height: 10),
                 TextField(
                   controller: dueDayCtrl,
                   decoration: const InputDecoration(
-                    labelText: '還款日（每月幾號，例：25）',
+                    labelText: '繳卡費日（每月幾號，例：25）',
+                  ),
+                  keyboardType: TextInputType.number,
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: reminderDayCtrl,
+                  decoration: const InputDecoration(
+                    labelText: '提醒通知日（每月幾號）',
                   ),
                   keyboardType: TextInputType.number,
                 ),
@@ -211,10 +249,16 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
           name: nameCtrl.text.trim().isEmpty ? card.name : nameCtrl.text.trim(),
           type: card.type,
           color: selectedColor,
-          bank: bankCtrl.text.trim().isEmpty ? null : bankCtrl.text.trim(),
+          bank: isEasycard
+              ? null
+              : (bankCtrl.text.trim().isEmpty ? null : bankCtrl.text.trim()),
           lastFour: lastFourCtrl.text.trim().isEmpty ? null : lastFourCtrl.text.trim(),
-          balance: card.balance,
-          paymentDueDate: dueDayCtrl.text.trim().isEmpty ? null : dueDayCtrl.text.trim(),
+          balance: isCredit ? null : double.tryParse(balanceCtrl.text),
+          dueAmount: isCredit ? double.tryParse(dueAmountCtrl.text) : null,
+          paymentDueDate: isCredit && dueDayCtrl.text.trim().isNotEmpty
+              ? dueDayCtrl.text.trim()
+              : null,
+          reminderDay: isCredit ? int.tryParse(reminderDayCtrl.text) : null,
         );
         await _load();
       } catch (e) {
@@ -234,7 +278,10 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      builder: (_) => AddTransactionSheet(cards: _cards),
+      builder: (_) => AddTransactionSheet(
+        cards: _cards,
+        outstandingLoans: outstandingLoans(_transactions),
+      ),
     );
     if (added == true) await _load();
   }
@@ -280,6 +327,7 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
                     _TransactionSliver(
                       transactions: _transactions,
                       onDelete: _deleteTransaction,
+                      onMarkPaid: _markCodPaid,
                     ),
                 ],
               ),
@@ -435,9 +483,13 @@ class _CardTile extends StatelessWidget {
             ),
             const Spacer(),
             Text(
-              card.balance != null
-                  ? NumberFormat.currency(symbol: '\$', decimalDigits: 0).format(card.balance)
-                  : '未設定餘額',
+              card.type == 'credit'
+                  ? (card.dueAmount != null
+                      ? NumberFormat.currency(symbol: '\$', decimalDigits: 0).format(card.dueAmount)
+                      : '未設定應繳金額')
+                  : (card.balance != null
+                      ? NumberFormat.currency(symbol: '\$', decimalDigits: 0).format(card.balance)
+                      : '未設定餘額'),
               style: const TextStyle(
                 color: Colors.white,
                 fontSize: 30,
@@ -479,10 +531,12 @@ class _TransactionSliver extends StatelessWidget {
   const _TransactionSliver({
     required this.transactions,
     required this.onDelete,
+    required this.onMarkPaid,
   });
 
   final List<Transaction> transactions;
   final ValueChanged<Transaction> onDelete;
+  final ValueChanged<Transaction> onMarkPaid;
 
   @override
   Widget build(BuildContext context) {
@@ -544,7 +598,10 @@ class _TransactionSliver extends StatelessWidget {
                     );
                   },
                   onDismissed: (_) => onDelete(tx),
-                  child: _TransactionTile(tx: tx),
+                  child: _TransactionTile(
+                    tx: tx,
+                    onMarkPaid: tx.isCodUnpaid ? () => onMarkPaid(tx) : null,
+                  ),
                 ),
               ),
             ],
@@ -557,42 +614,99 @@ class _TransactionSliver extends StatelessWidget {
 }
 
 class _TransactionTile extends StatelessWidget {
-  const _TransactionTile({required this.tx});
+  const _TransactionTile({required this.tx, this.onMarkPaid});
   final Transaction tx;
+  final VoidCallback? onMarkPaid;
 
   @override
   Widget build(BuildContext context) {
     final isExpense = tx.isExpense;
+    final unpaidCod = tx.isCodUnpaid;
+    final isLoan = tx.isLoan && tx.loanPerson != null;
+    const codColor = Color(0xFFF59E0B);
+    final loanColor = isLoan ? personColor(tx.loanPerson!) : null;
     final amountStr =
         '${isExpense ? '-' : '+'}\$${NumberFormat('#,##0').format(tx.amount.abs())}';
 
     return ListTile(
       contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 2),
       leading: CircleAvatar(
-        backgroundColor: isExpense
-            ? Theme.of(context).colorScheme.errorContainer
-            : const Color(0xFFD1FAE5),
+        backgroundColor: unpaidCod
+            ? codColor.withValues(alpha: 0.15)
+            : (loanColor?.withValues(alpha: 0.15) ??
+                (isExpense
+                    ? Theme.of(context).colorScheme.errorContainer
+                    : const Color(0xFFD1FAE5))),
         child: Icon(
-          isExpense ? Icons.arrow_upward_rounded : Icons.arrow_downward_rounded,
+          unpaidCod
+              ? Icons.local_shipping_outlined
+              : (isLoan
+                  ? Icons.handshake_outlined
+                  : (isExpense ? Icons.arrow_upward_rounded : Icons.arrow_downward_rounded)),
           size: 18,
-          color: isExpense
-              ? Theme.of(context).colorScheme.error
-              : const Color(0xFF059669),
+          color: unpaidCod
+              ? codColor
+              : (loanColor ??
+                  (isExpense
+                      ? Theme.of(context).colorScheme.error
+                      : const Color(0xFF059669))),
         ),
       ),
       title: Text(tx.description, style: const TextStyle(fontWeight: FontWeight.w500)),
-      subtitle: tx.card != null
-          ? Text(tx.card!.name, style: const TextStyle(fontSize: 12))
-          : null,
-      trailing: Text(
-        amountStr,
-        style: TextStyle(
-          fontWeight: FontWeight.w600,
-          fontSize: 15,
-          color: isExpense
-              ? Theme.of(context).colorScheme.error
-              : const Color(0xFF059669),
-        ),
+      subtitle: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (isLoan) ...[
+            Container(
+              width: 8,
+              height: 8,
+              margin: const EdgeInsets.only(right: 4),
+              decoration: BoxDecoration(color: loanColor, shape: BoxShape.circle),
+            ),
+          ],
+          Text(
+            unpaidCod ? '⚠ 貨到付款未付' : (isLoan ? tx.loanPerson! : (tx.card?.name ?? '')),
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: (unpaidCod || isLoan) ? FontWeight.w600 : null,
+              color: unpaidCod ? codColor : loanColor,
+            ),
+          ),
+        ],
+      ),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            amountStr,
+            style: TextStyle(
+              fontWeight: FontWeight.w600,
+              fontSize: 15,
+              color: unpaidCod
+                  ? codColor
+                  : (loanColor ??
+                      (isExpense
+                          ? Theme.of(context).colorScheme.error
+                          : const Color(0xFF059669))),
+            ),
+          ),
+          if (onMarkPaid != null) ...[
+            const SizedBox(width: 8),
+            GestureDetector(
+              onTap: onMarkPaid,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                decoration: BoxDecoration(
+                  color: codColor,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Text('標記已付',
+                    style: TextStyle(
+                        fontSize: 11, color: Colors.white, fontWeight: FontWeight.w600)),
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }

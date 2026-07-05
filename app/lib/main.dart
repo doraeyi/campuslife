@@ -47,7 +47,7 @@ class CampusLifeApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp.router(
-      title: 'CampusLife',
+      title: 'YiWallet',
       themeMode: ThemeMode.system,
       theme: _buildTheme(Brightness.light),
       darkTheme: _buildTheme(Brightness.dark),

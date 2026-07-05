@@ -16,6 +16,7 @@ const _expenseCategories = <_Cat>[
   (id: 'daily',         emoji: '🏠', label: '日常'),
   (id: 'entertainment', emoji: '🎮', label: '娛樂'),
   (id: 'education',     emoji: '📚', label: '教育'),
+  (id: 'loan',          emoji: '🤝', label: '借錢'),
   (id: 'other',         emoji: '📦', label: '其他'),
 ];
 
@@ -24,6 +25,7 @@ const _incomeCategories = <_Cat>[
   (id: 'bonus',     emoji: '🎁', label: '獎金'),
   (id: 'transfer',  emoji: '💸', label: '轉帳'),
   (id: 'invest',    emoji: '📈', label: '投資'),
+  (id: 'loan',      emoji: '🤝', label: '還錢'),
   (id: 'other',     emoji: '📦', label: '其他'),
 ];
 
@@ -58,11 +60,13 @@ class AddTransactionSheet extends StatefulWidget {
     required this.cards,
     this.prefillAmount,
     this.prefillType,
+    this.outstandingLoans = const {},
   });
 
   final List<AppCard> cards;
   final double? prefillAmount;
   final String? prefillType;
+  final Map<String, double> outstandingLoans;
 
   @override
   State<AddTransactionSheet> createState() => _AddTransactionSheetState();
@@ -71,6 +75,7 @@ class AddTransactionSheet extends StatefulWidget {
 class _AddTransactionSheetState extends State<AddTransactionSheet> {
   final _api = ApiClient();
   final _noteCtrl = TextEditingController();
+  final _loanPersonCtrl = TextEditingController();
 
   String _type = 'expense';
   String _amountStr = '0';
@@ -78,6 +83,10 @@ class _AddTransactionSheetState extends State<AddTransactionSheet> {
   int? _selectedCardId; // null = 現金
   DateTime _date = DateTime.now();
   bool _saving = false;
+  bool _isCod = false;
+  String? _repayPerson;
+
+  bool get _isLoan => _category == 'loan';
 
   List<_Pay> get _payOptions => _buildPayOptions(widget.cards);
   List<_Cat> get _categories =>
@@ -99,6 +108,7 @@ class _AddTransactionSheetState extends State<AddTransactionSheet> {
   @override
   void dispose() {
     _noteCtrl.dispose();
+    _loanPersonCtrl.dispose();
     super.dispose();
   }
 
@@ -130,10 +140,22 @@ class _AddTransactionSheetState extends State<AddTransactionSheet> {
 
   double get _amount => double.tryParse(_amountStr) ?? 0;
 
+  String? get _loanPerson =>
+      _type == 'expense' ? _loanPersonCtrl.text.trim() : _repayPerson;
+
   Future<void> _submit() async {
     if (_amount <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('請輸入金額'), behavior: SnackBarBehavior.floating),
+      );
+      return;
+    }
+    if (_isLoan && (_loanPerson == null || _loanPerson!.isEmpty)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(_type == 'expense' ? '請填寫借給誰' : '請選擇還款的人'),
+          behavior: SnackBarBehavior.floating,
+        ),
       );
       return;
     }
@@ -145,12 +167,17 @@ class _AddTransactionSheetState extends State<AddTransactionSheet> {
       await _api.createTransaction(
         cardId: _selectedCardId,
         amount: signedAmount,
-        description: _category != null
-            ? _categories.firstWhere((c) => c.id == _category).label
-            : (_type == 'expense' ? '支出' : '收入'),
+        description: _isLoan
+            ? (_type == 'expense' ? '借錢給 $_loanPerson' : '$_loanPerson 還錢')
+            : (_category != null
+                ? _categories.firstWhere((c) => c.id == _category).label
+                : (_type == 'expense' ? '支出' : '收入')),
         transactionType: _type,
         category: _category,
         note: note.isEmpty ? null : note,
+        isCod: _isCod,
+        isLoan: _isLoan,
+        loanPerson: _isLoan ? _loanPerson : null,
       );
       if (mounted) Navigator.pop(context, true);
     } catch (_) {
@@ -179,9 +206,9 @@ class _AddTransactionSheetState extends State<AddTransactionSheet> {
     final accentColor = isExpense ? const Color(0xFFFF4D6D) : const Color(0xFF10B981);
 
     return Container(
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -220,6 +247,9 @@ class _AddTransactionSheetState extends State<AddTransactionSheet> {
               onChanged: (v) => setState(() {
                 _type = v;
                 _category = null;
+                if (v != 'expense') _isCod = false;
+                _loanPersonCtrl.clear();
+                _repayPerson = null;
               }),
             ),
           ),
@@ -230,9 +260,28 @@ class _AddTransactionSheetState extends State<AddTransactionSheet> {
             child: _CategoryGrid(
               categories: _categories,
               selected: _category,
-              onTap: (id) => setState(() => _category = _category == id ? null : id),
+              onTap: (id) => setState(() {
+                _category = _category == id ? null : id;
+                if (_category != 'loan') {
+                  _loanPersonCtrl.clear();
+                  _repayPerson = null;
+                }
+              }),
             ),
           ),
+
+          // ── 沒有欠款可還時的提示 ───────────────────────────────────────
+          if (_isLoan && !isExpense && widget.outstandingLoans.isEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+              child: Text(
+                '目前沒有人欠你錢',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Theme.of(context).colorScheme.outline,
+                ),
+              ),
+            ),
 
           // ── Amount display ────────────────────────────────────────────
           Padding(
@@ -263,7 +312,7 @@ class _AddTransactionSheetState extends State<AddTransactionSheet> {
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFF3F4F6),
+                      color: Theme.of(context).colorScheme.surfaceContainerHighest,
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Row(
@@ -279,6 +328,59 @@ class _AddTransactionSheetState extends State<AddTransactionSheet> {
                   ),
                 ),
                 const SizedBox(width: 8),
+                // 借給誰 / 誰還錢（借錢分類啟用時顯示）
+                if (_isLoan && isExpense) ...[
+                  Expanded(
+                    child: TextField(
+                      controller: _loanPersonCtrl,
+                      style: const TextStyle(fontSize: 13),
+                      decoration: InputDecoration(
+                        hintText: '借給誰',
+                        hintStyle: const TextStyle(fontSize: 13),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        filled: true,
+                        fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide.none,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                ] else if (_isLoan && !isExpense && widget.outstandingLoans.isNotEmpty) ...[
+                  Expanded(
+                    child: DropdownButtonFormField<String>(
+                      initialValue: _repayPerson,
+                      isDense: true,
+                      isExpanded: true,
+                      style: TextStyle(
+                          fontSize: 13, color: Theme.of(context).colorScheme.onSurface),
+                      decoration: InputDecoration(
+                        hintText: '誰還錢',
+                        hintStyle: const TextStyle(fontSize: 13),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        filled: true,
+                        fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide.none,
+                        ),
+                      ),
+                      items: widget.outstandingLoans.entries
+                          .map((e) => DropdownMenuItem(
+                                value: e.key,
+                                child: Text(
+                                  '${e.key}（欠 \$${e.value.toStringAsFixed(0)}）',
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ))
+                          .toList(),
+                      onChanged: (v) => setState(() => _repayPerson = v),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                ],
                 // Note field
                 Expanded(
                   child: TextField(
@@ -289,7 +391,7 @@ class _AddTransactionSheetState extends State<AddTransactionSheet> {
                       hintStyle: const TextStyle(fontSize: 13),
                       contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                       filled: true,
-                      fillColor: const Color(0xFFF3F4F6),
+                      fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
                         borderSide: BorderSide.none,
@@ -318,7 +420,9 @@ class _AddTransactionSheetState extends State<AddTransactionSheet> {
                     duration: const Duration(milliseconds: 180),
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                     decoration: BoxDecoration(
-                      color: selected ? const Color(0xFF1E3A5F) : const Color(0xFFF3F4F6),
+                      color: selected
+                          ? const Color(0xFF1E3A5F)
+                          : Theme.of(context).colorScheme.surfaceContainerHighest,
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Row(
@@ -331,7 +435,9 @@ class _AddTransactionSheetState extends State<AddTransactionSheet> {
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w500,
-                            color: selected ? Colors.white : Colors.black87,
+                            color: selected
+                                ? Colors.white
+                                : Theme.of(context).colorScheme.onSurface,
                           ),
                         ),
                       ],
@@ -341,6 +447,33 @@ class _AddTransactionSheetState extends State<AddTransactionSheet> {
               },
             ),
           ),
+
+          // ── 貨到付款 ──────────────────────────────────────────────────
+          if (isExpense)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 2, 16, 0),
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: Checkbox(
+                      value: _isCod,
+                      onChanged: (v) => setState(() => _isCod = v ?? false),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  GestureDetector(
+                    onTap: () => setState(() => _isCod = !_isCod),
+                    child: const Text(
+                      '貨到付款（尚未付款，付款前不計入餘額）',
+                      style: TextStyle(fontSize: 12),
+                    ),
+                  ),
+                ],
+              ),
+            ),
 
           // ── Numpad ────────────────────────────────────────────────────
           _Numpad(
@@ -366,7 +499,7 @@ class _TypeToggle extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        color: const Color(0xFFF3F4F6),
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
         borderRadius: BorderRadius.circular(10),
       ),
       padding: const EdgeInsets.all(3),
@@ -420,7 +553,9 @@ class _Pill extends StatelessWidget {
             style: TextStyle(
               fontWeight: FontWeight.w600,
               fontSize: 15,
-              color: selected ? Colors.white : Colors.black54,
+              color: selected
+                  ? Colors.white
+                  : Theme.of(context).colorScheme.onSurfaceVariant,
             ),
           ),
         ),
@@ -463,7 +598,7 @@ class _CategoryGrid extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: isSelected
                       ? Theme.of(context).colorScheme.primaryContainer
-                      : const Color(0xFFF3F4F6),
+                      : Theme.of(context).colorScheme.surfaceContainerHighest,
                   shape: BoxShape.circle,
                   border: isSelected
                       ? Border.all(
@@ -482,7 +617,7 @@ class _CategoryGrid extends StatelessWidget {
                   fontSize: 11,
                   color: isSelected
                       ? Theme.of(context).colorScheme.primary
-                      : Colors.black54,
+                      : Theme.of(context).colorScheme.onSurfaceVariant,
                   fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
                 ),
               ),
@@ -582,7 +717,7 @@ class _NumKey extends StatelessWidget {
       child: Container(
         margin: const EdgeInsets.all(1),
         decoration: BoxDecoration(
-          color: const Color(0xFFF9FAFB),
+          color: Theme.of(context).colorScheme.surfaceContainerHigh,
           borderRadius: BorderRadius.circular(10),
         ),
         alignment: Alignment.center,

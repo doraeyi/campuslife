@@ -1,11 +1,11 @@
 {
-    "name": "campuslife",
-    "short_name": "campuslife",
+    "name": "YiWallet",
+    "short_name": "YiWallet",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "description": "YiWallet 記帳 App",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

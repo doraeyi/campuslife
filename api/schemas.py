@@ -183,8 +183,18 @@ class CardBase(BaseModel):
     last_four: str | None = None
     bank: str | None = None
     balance: float | None = None
+    due_amount: float | None = None
     pass_expiry_date: str | None = None
     payment_due_date: str | None = None
+    reminder_day: int | None = None
+
+    @model_validator(mode="after")
+    def _validate_required_fields(self):
+        if not self.last_four or len(self.last_four) != 4:
+            raise ValueError("卡號後四碼為必填")
+        if self.type != "easycard" and not self.bank:
+            raise ValueError("銀行為必填")
+        return self
 
 
 class CardCreate(CardBase):
@@ -209,9 +219,18 @@ class TransactionCreate(BaseModel):
     category: str | None = None
     note: str | None = None
     date: str | None = None
+    is_cod: bool = False
+    is_loan: bool = False
+    loan_person: str | None = None
     # Next.js field aliases
     type: str | None = None
     category_id: str | None = None
+
+    @model_validator(mode="after")
+    def _validate_loan(self):
+        if self.is_loan and not (self.loan_person and self.loan_person.strip()):
+            raise ValueError("請填寫借款對象")
+        return self
 
     @model_validator(mode="before")
     @classmethod
@@ -242,6 +261,10 @@ class TransactionRead(BaseModel):
     transaction_type: str
     category: str | None
     note: str | None
+    is_cod: bool
+    cod_paid: bool
+    is_loan: bool
+    loan_person: str | None
     created_at: datetime
     card: "CardRead | None" = None
 

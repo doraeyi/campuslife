@@ -280,8 +280,10 @@ class ApiClient {
     String? bank,
     String? lastFour,
     double? balance,
+    double? dueAmount,
     String? paymentDueDate,
     String? passExpiryDate,
+    int? reminderDay,
   }) async {
     final response = await http.put(
       Uri.parse('$baseUrl/cards/$id'),
@@ -293,8 +295,10 @@ class ApiClient {
         'bank': bank,
         'last_four': lastFour,
         'balance': balance,
+        'due_amount': dueAmount,
         'payment_due_date': paymentDueDate,
         'pass_expiry_date': passExpiryDate,
+        'reminder_day': reminderDay,
       }),
     );
     if (response.statusCode != 200) throw Exception('更新卡片失敗');
@@ -308,8 +312,10 @@ class ApiClient {
     String? bank,
     String? lastFour,
     double? balance,
+    double? dueAmount,
     String? paymentDueDate,
     String? passExpiryDate,
+    int? reminderDay,
   }) async {
     final response = await http.post(
       Uri.parse('$baseUrl/cards'),
@@ -321,8 +327,10 @@ class ApiClient {
         'bank': bank,
         'last_four': lastFour,
         'balance': balance,
+        'due_amount': dueAmount,
         'payment_due_date': paymentDueDate,
         'pass_expiry_date': passExpiryDate,
+        'reminder_day': reminderDay,
       }),
     );
     if (response.statusCode != 200 && response.statusCode != 201) throw Exception('新增卡片失敗');
@@ -388,6 +396,9 @@ class ApiClient {
     required String transactionType,
     String? category,
     String? note,
+    bool isCod = false,
+    bool isLoan = false,
+    String? loanPerson,
   }) async {
     final response = await http.post(
       Uri.parse('$baseUrl/transactions'),
@@ -399,9 +410,21 @@ class ApiClient {
         'transaction_type': transactionType,
         'category': category,
         'note': note,
+        'is_cod': isCod,
+        'is_loan': isLoan,
+        'loan_person': loanPerson,
       }),
     );
     if (response.statusCode != 200) throw Exception('新增交易失敗');
+    return Transaction.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+  }
+
+  Future<Transaction> markCodPaid(int transactionId) async {
+    final response = await http.patch(
+      Uri.parse('$baseUrl/transactions/$transactionId/cod-paid'),
+      headers: await _authHeaders(),
+    );
+    if (response.statusCode != 200) throw Exception('標記付款失敗');
     return Transaction.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
   }
 

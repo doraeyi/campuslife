@@ -92,6 +92,8 @@ class NotificationService {
   }
 
   // 信用卡還款日：card.paymentDueDate 儲存每月幾號（e.g. "25"）
+  // 若使用者有設定 card.reminderDay（幾號提醒），則只在提醒日當天通知；
+  // 否則沿用預設邏輯：還款日前 3 天內每天提醒。
   Future<void> checkCreditCardDueDates(List<AppCard> cards) async {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
@@ -105,7 +107,12 @@ class NotificationService {
         due = DateTime(now.year, now.month + 1, day);
       }
       final diff = due.difference(today).inDays;
-      if (diff < 0 || diff > 3) continue;
+
+      if (card.reminderDay != null) {
+        if (card.reminderDay != now.day) continue;
+      } else if (diff < 0 || diff > 3) {
+        continue;
+      }
 
       final label = diff == 0 ? '今天！' : diff == 1 ? '明天' : '${diff}天後';
       await _show(

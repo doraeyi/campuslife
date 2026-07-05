@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Date, DateTime, Float, ForeignKey, Integer, String, Text, Time, UniqueConstraint
+from sqlalchemy import Boolean, Column, Date, DateTime, Float, ForeignKey, Integer, String, Text, Time, UniqueConstraint
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
@@ -63,8 +63,10 @@ class Card(Base):
     last_four = Column(String(4), nullable=True)
     bank = Column(String(100), nullable=True)
     balance = Column(Float, nullable=True)
+    due_amount = Column(Float, nullable=True)
     pass_expiry_date = Column(String(10), nullable=True)
     payment_due_date = Column(String(10), nullable=True)
+    reminder_day = Column(Integer, nullable=True)
     created_at = Column(DateTime, server_default=func.now())
 
 
@@ -111,6 +113,10 @@ class Transaction(Base):
     transaction_type = Column(String(20), nullable=False)  # "expense" | "income"
     category = Column(String(20), nullable=True)
     note = Column(String(255), nullable=True)
+    is_cod = Column(Boolean, nullable=False, default=False)
+    cod_paid = Column(Boolean, nullable=False, default=False)
+    is_loan = Column(Boolean, nullable=False, default=False)
+    loan_person = Column(String(50), nullable=True)
     created_at = Column(DateTime, server_default=func.now())
 
     card = relationship("Card")

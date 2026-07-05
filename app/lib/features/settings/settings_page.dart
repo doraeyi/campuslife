@@ -721,9 +721,21 @@ class _CardRow extends ConsumerWidget {
   }
 
   String get _subtitle {
-    if (card.balance != null) return '餘額 \$${card.balance!.toStringAsFixed(0)}';
-    if (card.passExpiryDate != null) return '到期 ${card.passExpiryDate}';
-    return '';
+    final parts = <String>[];
+    if (card.type == 'easycard') {
+      parts.add('悠遊卡');
+    } else if (card.bank != null) {
+      parts.add(card.bank!);
+    }
+    if (card.lastFour != null) parts.add('末四碼 ${card.lastFour}');
+    if (card.type == 'credit') {
+      if (card.dueAmount != null) parts.add('應繳 \$${card.dueAmount!.toStringAsFixed(0)}');
+      if (card.paymentDueDate != null) parts.add('繳費日 ${card.paymentDueDate}號');
+    } else if (card.balance != null) {
+      parts.add('餘額 \$${card.balance!.toStringAsFixed(0)}');
+    }
+    if (parts.isEmpty && card.passExpiryDate != null) parts.add('到期 ${card.passExpiryDate}');
+    return parts.join('  ·  ');
   }
 
   @override
@@ -1249,34 +1261,55 @@ class _CardFormSheet extends HookConsumerWidget {
     final lastFourCtrl = useTextEditingController(text: card?.lastFour ?? '');
     final balanceCtrl = useTextEditingController(
         text: card?.balance != null ? card!.balance!.toStringAsFixed(0) : '');
+    final dueAmountCtrl = useTextEditingController(
+        text: card?.dueAmount != null ? card!.dueAmount!.toStringAsFixed(0) : '');
+    final paymentDueDateCtrl = useTextEditingController(text: card?.paymentDueDate ?? '');
+    final reminderDayCtrl =
+        useTextEditingController(text: card?.reminderDay?.toString() ?? '');
     final type = useState(card?.type ?? 'credit');
     final color = useState(card?.color ?? '#6366F1');
     final saving = useState(false);
     final formKey = useMemoized(GlobalKey<FormState>.new);
 
     final colorValue = Color(int.parse('FF${color.value.replaceAll('#', '')}', radix: 16));
+    final isEasycard = type.value == 'easycard';
+    final isCredit = type.value == 'credit';
+    final showBalance = type.value == 'debit' || type.value == 'easycard';
 
     Future<void> save() async {
       if (!(formKey.currentState?.validate() ?? false)) return;
       saving.value = true;
       try {
-        final balance = double.tryParse(balanceCtrl.text);
-        final bank = bankCtrl.text.trim().isEmpty ? null : bankCtrl.text.trim();
-        final lastFour = lastFourCtrl.text.trim().isEmpty ? null : lastFourCtrl.text.trim();
+        final balance = showBalance ? double.tryParse(balanceCtrl.text) : null;
+        final dueAmount = isCredit ? double.tryParse(dueAmountCtrl.text) : null;
+        final paymentDueDate = isCredit && paymentDueDateCtrl.text.trim().isNotEmpty
+            ? paymentDueDateCtrl.text.trim()
+            : null;
+        final reminderDay = isCredit ? int.tryParse(reminderDayCtrl.text) : null;
+        final bank = isEasycard
+            ? null
+            : (bankCtrl.text.trim().isEmpty ? null : bankCtrl.text.trim());
+        final lastFour = lastFourCtrl.text.trim();
         if (card == null) {
           await ref.read(cardsProvider.notifier).addCard(
             name: nameCtrl.text.trim(), type: type.value, color: color.value,
             bank: bank, lastFour: lastFour, balance: balance,
+            dueAmount: dueAmount, paymentDueDate: paymentDueDate, reminderDay: reminderDay,
           );
         } else {
           await ref.read(cardsProvider.notifier).updateCard(
             card!.id, name: nameCtrl.text.trim(), type: type.value, color: color.value,
             bank: bank, lastFour: lastFour, balance: balance,
+            dueAmount: dueAmount, paymentDueDate: paymentDueDate, reminderDay: reminderDay,
           );
         }
         if (context.mounted) Navigator.pop(context);
-      } catch (_) {
+      } catch (e) {
         saving.value = false;
+        if (context.mounted) {
+          ScaffoldMessenger.of(context)
+              .showSnackBar(SnackBar(content: Text('儲存失敗：$e')));
+        }
       }
     }
 
@@ -1342,28 +1375,18 @@ class _CardFormSheet extends HookConsumerWidget {
               ),
               const SizedBox(height: 16),
 
-              // 名稱
-              TextFormField(
-                controller: nameCtrl,
-                decoration: const InputDecoration(
-                  labelText: '卡片名稱 *',
-                  border: OutlineInputBorder(),
-                  isDense: true,
-                ),
-                validator: (v) => v == null || v.trim().isEmpty ? '請輸入名稱' : null,
-              ),
-              const SizedBox(height: 12),
-
+              // 名稱 + 末四碼
               Row(
                 children: [
                   Expanded(
                     child: TextFormField(
-                      controller: bankCtrl,
+                      controller: nameCtrl,
                       decoration: const InputDecoration(
-                        labelText: '銀行（選填）',
+                        labelText: '卡片名稱 *',
                         border: OutlineInputBorder(),
                         isDense: true,
                       ),
+                      validator: (v) => v == null || v.trim().isEmpty ? '請輸入名稱' : null,
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -1372,30 +1395,92 @@ class _CardFormSheet extends HookConsumerWidget {
                     child: TextFormField(
                       controller: lastFourCtrl,
                       decoration: const InputDecoration(
-                        labelText: '末四碼',
+                        labelText: '卡號後四碼 *',
                         border: OutlineInputBorder(),
                         isDense: true,
                       ),
                       keyboardType: TextInputType.number,
                       maxLength: 4,
                       buildCounter: (_, {required currentLength, required isFocused, maxLength}) => null,
+                      validator: (v) => v == null || v.trim().length != 4
+                          ? '請輸入4碼'
+                          : null,
                     ),
                   ),
                 ],
               ),
               const SizedBox(height: 12),
 
-              TextFormField(
-                controller: balanceCtrl,
-                decoration: const InputDecoration(
-                  labelText: '目前餘額（選填）',
-                  prefixText: '\$ ',
-                  border: OutlineInputBorder(),
-                  isDense: true,
+              // 銀行
+              if (!isEasycard) ...[
+                TextFormField(
+                  controller: bankCtrl,
+                  decoration: const InputDecoration(
+                    labelText: '銀行 *',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                  validator: (v) =>
+                      v == null || v.trim().isEmpty ? '請輸入銀行' : null,
                 ),
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              ),
-              const SizedBox(height: 16),
+                const SizedBox(height: 12),
+              ],
+
+              if (showBalance) ...[
+                TextFormField(
+                  controller: balanceCtrl,
+                  decoration: const InputDecoration(
+                    labelText: '目前餘額（選填）',
+                    prefixText: '\$ ',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                ),
+                const SizedBox(height: 16),
+              ],
+
+              if (isCredit) ...[
+                TextFormField(
+                  controller: dueAmountCtrl,
+                  decoration: const InputDecoration(
+                    labelText: '目前需要繳的金額（選填）',
+                    prefixText: '\$ ',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextFormField(
+                        controller: paymentDueDateCtrl,
+                        decoration: const InputDecoration(
+                          labelText: '繳卡費日（幾號）',
+                          border: OutlineInputBorder(),
+                          isDense: true,
+                        ),
+                        keyboardType: TextInputType.number,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: TextFormField(
+                        controller: reminderDayCtrl,
+                        decoration: const InputDecoration(
+                          labelText: '提醒通知日（幾號）',
+                          border: OutlineInputBorder(),
+                          isDense: true,
+                        ),
+                        keyboardType: TextInputType.number,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+              ],
 
               // 顏色
               const Text('顏色', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),

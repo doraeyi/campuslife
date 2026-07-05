@@ -9,7 +9,6 @@ import '../models/shift.dart';
 import '../models/transaction.dart';
 import '../providers/auth_provider.dart';
 import '../services/api_client.dart';
-import 'add_transaction_sheet.dart';
 
 class HomeTab extends ConsumerStatefulWidget {
   const HomeTab({super.key});
@@ -86,24 +85,38 @@ class _HomeTabState extends ConsumerState<HomeTab> {
     }).toList();
   }
 
-  double _expense(String? type) =>
-      _txOf(type).where((t) => t.amount < 0).fold(0.0, (s, t) => s + t.amount.abs());
+  double _expense(String? type) => _txOf(type)
+      .where((t) => t.amount < 0 && !t.isCodUnpaid)
+      .fold(0.0, (s, t) => s + t.amount.abs());
 
-  double _income(String? type) =>
-      _txOf(type).where((t) => t.amount > 0).fold(0.0, (s, t) => s + t.amount);
+  double _income(String? type) => _txOf(type)
+      .where((t) => t.amount > 0 && !t.isCodUnpaid)
+      .fold(0.0, (s, t) => s + t.amount);
 
   double _balance(String? type) =>
       _cardsOf(type).fold(0.0, (s, c) => s + (c.balance ?? 0));
 
-  void _openAddTransaction() async {
-    final added = await showModalBottomSheet<bool>(
-      context: context,
-      isScrollControlled: true,
-      useRootNavigator: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => AddTransactionSheet(cards: _cards),
-    );
-    if (added == true) _load();
+  // 是否有貨到付款尚未付款的紀錄（不限本月，付清前持續提醒）
+  bool _hasUnpaidCod(String? type) {
+    final ids = _cardsOf(type).map((c) => c.id).toSet();
+    return _transactions.any((t) {
+      if (!t.isCodUnpaid) return false;
+      if (type == null) return true;
+      return t.cardId != null && ids.contains(t.cardId);
+    });
+  }
+
+  // 是否有借出還沒還清的紀錄（借款不分卡片類型，只在「全部」分頁提醒）
+  bool get _hasOutstandingLoan => outstandingLoans(_transactions).isNotEmpty;
+
+  Future<void> _deleteTransaction(Transaction tx) async {
+    await _api.deleteTransaction(tx.id);
+    await _load();
+  }
+
+  Future<void> _markCodPaid(Transaction tx) async {
+    await _api.markCodPaid(tx.id);
+    await _load();
   }
 
   @override
@@ -201,13 +214,24 @@ class _HomeTabState extends ConsumerState<HomeTab> {
                                   onPageChanged: (i) => setState(() => _page = i),
                                   itemBuilder: (_, i) {
                                     final type = pages[i];
-                                    final pageNet = _income(type) - _expense(type);
                                     final cards = _cardsOf(type);
-                                    final color = _typeColor(type, cards, context);
+                                    final hasUnpaidCod = _hasUnpaidCod(type);
+                                    final hasLoan = type == null && _hasOutstandingLoan;
+                                    final hasWarning = hasUnpaidCod || hasLoan;
+                                    final color = hasWarning
+                                        ? const Color(0xFFF59E0B)
+                                        : _typeColor(type, cards, context);
+                                    final showBalance =
+                                        type == 'debit' || type == 'easycard';
+                                    final value = showBalance
+                                        ? _balance(type)
+                                        : _income(type) - _expense(type);
                                     return _RingChart(
-                                      net: pageNet,
-                                      label: '月結餘',
+                                      net: value,
+                                      label: showBalance ? '剩餘金額' : '月結餘',
                                       color: color,
+                                      hasUnpaidCod: hasUnpaidCod,
+                                      hasOutstandingLoan: hasLoan,
                                     );
                                   },
                                 ),
@@ -285,7 +309,45 @@ class _HomeTabState extends ConsumerState<HomeTab> {
                             ),
                           )
                         else
-                          ...recentTx.map((t) => _TransactionTile(tx: t, cards: _cards)),
+                          ...recentTx.map((t) => Dismissible(
+                                key: ValueKey(t.id),
+                                direction: DismissDirection.endToStart,
+                                background: Container(
+                                  margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 3),
+                                  padding: const EdgeInsets.only(right: 16),
+                                  alignment: Alignment.centerRight,
+                                  decoration: BoxDecoration(
+                                    color: Theme.of(context).colorScheme.errorContainer,
+                                    borderRadius: BorderRadius.circular(14),
+                                  ),
+                                  child: Icon(Icons.delete_rounded,
+                                      color: Theme.of(context).colorScheme.onErrorContainer),
+                                ),
+                                confirmDismiss: (_) async {
+                                  return await showDialog<bool>(
+                                    context: context,
+                                    builder: (d) => AlertDialog(
+                                      title: const Text('刪除紀錄'),
+                                      content: Text('確定刪除「${t.description}」？餘額將還原。'),
+                                      actions: [
+                                        TextButton(
+                                            onPressed: () => Navigator.pop(d, false),
+                                            child: const Text('取消')),
+                                        FilledButton(
+                                          onPressed: () => Navigator.pop(d, true),
+                                          child: const Text('刪除'),
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                },
+                                onDismissed: (_) => _deleteTransaction(t),
+                                child: _TransactionTile(
+                                  tx: t,
+                                  cards: _cards,
+                                  onMarkPaid: t.isCodUnpaid ? () => _markCodPaid(t) : null,
+                                ),
+                              )),
 
                         const SizedBox(height: 100),
                       ],
@@ -318,11 +380,19 @@ class _HomeTabState extends ConsumerState<HomeTab> {
 // ── Ring chart ────────────────────────────────────────────────────────────────
 
 class _RingChart extends StatelessWidget {
-  const _RingChart({required this.net, required this.label, required this.color});
+  const _RingChart({
+    required this.net,
+    required this.label,
+    required this.color,
+    this.hasUnpaidCod = false,
+    this.hasOutstandingLoan = false,
+  });
 
   final double net;
   final String label;
   final Color color;
+  final bool hasUnpaidCod;
+  final bool hasOutstandingLoan;
 
   @override
   Widget build(BuildContext context) {
@@ -359,6 +429,20 @@ class _RingChart extends StatelessWidget {
                         : const Color(0xFFEF4444),
                   ),
                 ),
+                if (hasUnpaidCod) ...[
+                  const SizedBox(height: 4),
+                  const Text(
+                    '⚠ 有貨到付款未付',
+                    style: TextStyle(fontSize: 11, color: Color(0xFFF59E0B)),
+                  ),
+                ],
+                if (hasOutstandingLoan) ...[
+                  const SizedBox(height: 4),
+                  const Text(
+                    '⚠ 有借款未還',
+                    style: TextStyle(fontSize: 11, color: Color(0xFFF59E0B)),
+                  ),
+                ],
               ],
             ),
           ],
@@ -523,16 +607,22 @@ class _NextShiftCard extends StatelessWidget {
 // ── Transaction tile ──────────────────────────────────────────────────────────
 
 class _TransactionTile extends StatelessWidget {
-  const _TransactionTile({required this.tx, required this.cards});
+  const _TransactionTile({required this.tx, required this.cards, this.onMarkPaid});
   final Transaction tx;
   final List<AppCard> cards;
+  final VoidCallback? onMarkPaid;
 
   @override
   Widget build(BuildContext context) {
     final fmt = NumberFormat.currency(symbol: '\$', decimalDigits: 0);
     final isExpense = tx.amount < 0;
-    final color =
-        isExpense ? const Color(0xFFEF4444) : const Color(0xFF10B981);
+    final unpaidCod = tx.isCodUnpaid;
+    final isLoan = tx.isLoan && tx.loanPerson != null;
+    const codColor = Color(0xFFF59E0B);
+    final loanColor = isLoan ? personColor(tx.loanPerson!) : null;
+    final color = unpaidCod
+        ? codColor
+        : (loanColor ?? (isExpense ? const Color(0xFFEF4444) : const Color(0xFF10B981)));
 
     final matchList = tx.cardId != null
         ? cards.where((c) => c.id == tx.cardId).toList()
@@ -552,6 +642,7 @@ class _TransactionTile extends StatelessWidget {
         decoration: BoxDecoration(
           color: Theme.of(context).colorScheme.surfaceContainer,
           borderRadius: BorderRadius.circular(14),
+          border: unpaidCod ? Border.all(color: codColor.withValues(alpha: 0.5)) : null,
         ),
         child: Row(
           children: [
@@ -563,9 +654,13 @@ class _TransactionTile extends StatelessWidget {
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Icon(
-                isExpense
-                    ? Icons.arrow_downward_rounded
-                    : Icons.arrow_upward_rounded,
+                unpaidCod
+                    ? Icons.local_shipping_outlined
+                    : (isLoan
+                        ? Icons.handshake_outlined
+                        : (isExpense
+                            ? Icons.arrow_downward_rounded
+                            : Icons.arrow_upward_rounded)),
                 size: 17,
                 color: color,
               ),
@@ -580,11 +675,33 @@ class _TransactionTile extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                           fontSize: 14, fontWeight: FontWeight.w500)),
-                  Text(
-                    '$cardEmoji ${card?.name ?? '現金'}',
-                    style: TextStyle(
-                        fontSize: 11,
-                        color: Theme.of(context).colorScheme.outline),
+                  Row(
+                    children: [
+                      if (isLoan) ...[
+                        Container(
+                          width: 8,
+                          height: 8,
+                          margin: const EdgeInsets.only(right: 4),
+                          decoration: BoxDecoration(
+                            color: loanColor,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                      ],
+                      Text(
+                        unpaidCod
+                            ? '⚠ 貨到付款未付'
+                            : (isLoan
+                                ? tx.loanPerson!
+                                : '$cardEmoji ${card?.name ?? '現金'}'),
+                        style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: (unpaidCod || isLoan) ? FontWeight.w600 : null,
+                            color: unpaidCod
+                                ? codColor
+                                : (loanColor ?? Theme.of(context).colorScheme.outline)),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -594,6 +711,22 @@ class _TransactionTile extends StatelessWidget {
               style: TextStyle(
                   fontSize: 15, fontWeight: FontWeight.w700, color: color),
             ),
+            if (onMarkPaid != null) ...[
+              const SizedBox(width: 8),
+              GestureDetector(
+                onTap: onMarkPaid,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: codColor,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Text('標記已付',
+                      style: TextStyle(
+                          fontSize: 11, color: Colors.white, fontWeight: FontWeight.w600)),
+                ),
+              ),
+            ],
           ],
         ),
       ),
