@@ -16,16 +16,18 @@ class CtbcParser implements BankNotificationParser {
   @override
   String get bankId => 'ctbc';
 
-  static final _bankHint = RegExp(r'中國信託|CTBC|LINE ?Pay簽帳卡');
   static final _cardLastFour = RegExp(r'卡末四碼[:：]?\s*(\d{4})');
   static final _merchant = RegExp(r'商店名稱[:：]?\s*(.+)');
   static final _time = RegExp(r'交易時間[:：]?\s*([\d/\-]+\s+[\d:]+)');
-  static final _amount = RegExp(r'NT\$?\s*([\d,]+(?:\.\d+)?)');
+  // OCR 常把 "$" 認成 "S"，NT 跟金額之間的符號盡量放寬
+  static final _amount = RegExp(r'NT\s*[\$Ss]?\s*(\d[\d,]*(?:\.\d+)?)');
 
+  // 不要求比對到「中國信託」「LINE Pay簽帳卡」這類招牌文字——OCR 對這些字
+  // 常常斷行、加空格、或把字元認錯，反而讓整組辨識直接失敗。改用「卡末四碼」
+  // +「商店名稱」這兩個欄位標籤同時出現來判斷，對這張卡片式訊息來說已經夠獨特。
   @override
   bool matches(String rawText) {
-    if (!_bankHint.hasMatch(rawText)) return false;
-    return _cardLastFour.hasMatch(rawText) || _merchant.hasMatch(rawText);
+    return _cardLastFour.hasMatch(rawText) && _merchant.hasMatch(rawText);
   }
 
   @override

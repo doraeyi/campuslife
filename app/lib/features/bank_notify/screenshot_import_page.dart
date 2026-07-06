@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -295,11 +296,24 @@ class ScreenshotImportPage extends HookConsumerWidget {
                 const SizedBox(height: 16),
                 Text(message.value!, style: const TextStyle(color: Colors.red)),
               ],
-              if (kDebugMode && recognizedText.value != null) ...[
+              if (recognizedText.value != null && (kDebugMode || parsed.value == null)) ...[
                 const SizedBox(height: 20),
-                const Text('辨識原文（除錯用）', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                Row(
+                  children: [
+                    const Text('辨識原文（辨識失敗時可複製回報）',
+                        style: TextStyle(fontSize: 12, color: Colors.grey)),
+                    const Spacer(),
+                    IconButton(
+                      icon: const Icon(Icons.copy_rounded, size: 16, color: Colors.grey),
+                      onPressed: () => Clipboard.setData(ClipboardData(text: recognizedText.value!)),
+                      tooltip: '複製',
+                      constraints: const BoxConstraints(),
+                      padding: const EdgeInsets.all(4),
+                    ),
+                  ],
+                ),
                 const SizedBox(height: 4),
-                Text(recognizedText.value!, style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                SelectableText(recognizedText.value!, style: const TextStyle(fontSize: 11, color: Colors.grey)),
               ],
             ],
           ),
