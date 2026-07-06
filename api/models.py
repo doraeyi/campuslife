@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, Column, Date, DateTime, Float, ForeignKey, Integer, String, Text, Time, UniqueConstraint
+from sqlalchemy import Boolean, Column, Date, DateTime, Float, ForeignKey, Integer, LargeBinary, String, Text, Time, UniqueConstraint
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
@@ -117,9 +117,25 @@ class Transaction(Base):
     cod_paid = Column(Boolean, nullable=False, default=False)
     is_loan = Column(Boolean, nullable=False, default=False)
     loan_person = Column(String(50), nullable=True)
+    source = Column(String(20), nullable=False, default="manual")  # manual | einvoice_csv | line_bot | bank_notification
+    einvoice_number = Column(String(10), nullable=True, index=True)
+    einvoice_random_code = Column(String(4), nullable=True)
     created_at = Column(DateTime, server_default=func.now())
 
     card = relationship("Card")
+
+    __table_args__ = (UniqueConstraint("user_id", "einvoice_number", name="uq_transaction_user_einvoice"),)
+
+
+class PendingBankScreenshot(Base):
+    """截圖轉傳給 LINE Bot 後暫存在這裡，等使用者打開 App 用手機本機 OCR 辨識、確認建立交易。"""
+    __tablename__ = "pending_bank_screenshots"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    image_data = Column(LargeBinary, nullable=False)
+    content_type = Column(String(50), nullable=False, default="image/jpeg")
+    created_at = Column(DateTime, server_default=func.now())
 
 
 class Friendship(Base):

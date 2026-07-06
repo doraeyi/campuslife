@@ -24,13 +24,14 @@ try:
         ApiClient as LineApiClient,
         Configuration as LineConfiguration,
         MessagingApi,
+        MessagingApiBlob,
         PostbackAction,
         QuickReply,
         QuickReplyItem,
         ReplyMessageRequest,
         TextMessage,
     )
-    from linebot.v3.webhooks import MessageEvent, PostbackEvent, TextMessageContent
+    from linebot.v3.webhooks import ImageMessageContent, MessageEvent, PostbackEvent, TextMessageContent
 
     _channel_secret = os.getenv("LINE_CHANNEL_SECRET", "")
     _channel_token = os.getenv("LINE_CHANNEL_ACCESS_TOKEN", "")
@@ -143,6 +144,8 @@ async def line_webhook(request: Request, db: Session = Depends(get_db)):
     for event in events:
         if isinstance(event, MessageEvent) and isinstance(event.message, TextMessageContent):
             _handle_text(event.message.text, event.source.user_id, event.reply_token, db)
+        elif isinstance(event, MessageEvent) and isinstance(event.message, ImageMessageContent):
+            _handle_image(event.message.id, event.source.user_id, event.reply_token, db)
         elif isinstance(event, PostbackEvent):
             _handle_postback(event.postback.data, event.source.user_id, event.reply_token, db)
 
@@ -337,6 +340,30 @@ def _handle_postback(data_str: str, line_user_id: str, reply_token: str, db: Ses
         )
 
     _record_expense(user, card, amount, description, db, reply_token)
+
+
+def _handle_image(message_id: str, line_user_id: str, reply_token: str, db: Session):
+    """使用者把銀行 LINE 通知的截圖轉傳過來：先存起來，實際的 OCR 辨識在 App 端用手機
+    本機 OCR 做（跟「銀行通知記帳」畫面裡選相簿匯入是同一套流程），這裡只負責收圖。"""
+    user: Optional[models.User] = (
+        db.query(models.User).filter(models.User.line_user_id == line_user_id).first()
+    )
+    if user is None:
+        _reply(reply_token, "你還沒綁定帳號！\n請在 App 設定頁產生綁定碼，再傳「綁定 XXXXXX」給我。")
+        return
+
+    with LineApiClient(_line_config) as client:
+        image_bytes = MessagingApiBlob(client).get_message_content(message_id)
+
+    shot = models.PendingBankScreenshot(
+        user_id=user.id,
+        image_data=bytes(image_bytes),
+        content_type="image/jpeg",
+    )
+    db.add(shot)
+    db.commit()
+
+    _reply(reply_token, "📸 已收到截圖！打開 YiWallet 的「銀行通知記帳」就能看到待確認項目。")
 
 
 def _record_expense(

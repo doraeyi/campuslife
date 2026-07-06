@@ -10,3 +10,4 @@ python-jose[cryptography]
 pydantic[email]
 line-bot-sdk>=3.0.0
 google-auth
+python-multipart

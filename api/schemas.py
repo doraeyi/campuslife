@@ -273,6 +273,19 @@ class CardBalanceUpdate(BaseModel):
     balance: float
 
 
+class EinvoiceImportResult(BaseModel):
+    imported: int
+    skipped: int
+    errors: list[str] = []
+
+
+class PendingScreenshotRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    created_at: datetime
+
+
 class FriendRequestCreate(BaseModel):
     email: EmailStr
 
