@@ -48,6 +48,16 @@ class BankNotifyService {
     await prefs.setStringList(_processedKeysPrefKey, trimmed);
   }
 
+  /// The de-dup list lives purely on-device and has no idea whether the
+  /// transaction it once pointed at still exists on the backend (e.g. it got
+  /// deleted, or the local storage survived a reinstall) — so a stale entry
+  /// can silently swallow a screenshot that should have been recorded again.
+  /// This clears that local list so the next forward is treated as fresh.
+  Future<void> clearProcessedKeys() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_processedKeysPrefKey);
+  }
+
   Future<Transaction> createTransaction(
     ParsedBankTransaction parsed, {
     int? cardId,

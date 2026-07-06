@@ -234,6 +234,34 @@ class ScreenshotImportPage extends HookConsumerWidget {
                 label: const Text('從相簿選擇截圖'),
                 style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
               ),
+              Center(
+                child: TextButton(
+                  onPressed: () async {
+                    final ok = await showDialog<bool>(
+                      context: context,
+                      builder: (ctx) => AlertDialog(
+                        title: const Text('清除本機去重紀錄'),
+                        content: const Text(
+                          '如果同一張截圖明明沒有真的記到帳，卻一直被判定成「已處理過」而沒有反應，'
+                          '可以用這個清掉本機的判斷紀錄，讓下次轉傳重新處理一次。',
+                        ),
+                        actions: [
+                          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
+                          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('清除')),
+                        ],
+                      ),
+                    );
+                    if (ok == true) {
+                      await service.clearProcessedKeys();
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context)
+                            .showSnackBar(const SnackBar(content: Text('已清除本機去重紀錄')));
+                      }
+                    }
+                  },
+                  child: const Text('清除本機去重紀錄', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                ),
+              ),
               if (recognizing.value) ...[
                 const SizedBox(height: 16),
                 const Center(child: CircularProgressIndicator()),
