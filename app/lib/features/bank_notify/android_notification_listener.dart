@@ -13,11 +13,14 @@ import 'parsers/parser_registry.dart';
 /// Only covers the case where the app process is alive — there's no
 /// headless-engine fallback for a fully-killed process yet.
 class AndroidBankNotificationListener {
-  static const _methodChannel = MethodChannel('com.campuslife.campuslife/bank_notify');
-  static const _eventChannel = EventChannel('com.campuslife.campuslife/bank_notifications');
+  static const _methodChannel =
+      MethodChannel('com.campuslife.campuslife/bank_notify');
+  static const _eventChannel =
+      EventChannel('com.campuslife.campuslife/bank_notifications');
   static const prefsKey = 'bank_notify_listener_enabled';
 
-  static final AndroidBankNotificationListener _instance = AndroidBankNotificationListener._();
+  static final AndroidBankNotificationListener _instance =
+      AndroidBankNotificationListener._();
   factory AndroidBankNotificationListener() => _instance;
   AndroidBankNotificationListener._();
 
@@ -25,7 +28,8 @@ class AndroidBankNotificationListener {
   final _service = BankNotifyService();
 
   Future<bool> isNotificationAccessGranted() async {
-    final granted = await _methodChannel.invokeMethod<bool>('isNotificationAccessGranted');
+    final granted =
+        await _methodChannel.invokeMethod<bool>('isNotificationAccessGranted');
     return granted ?? false;
   }
 
@@ -72,7 +76,8 @@ class AndroidBankNotificationListener {
     final cards = await ApiClient().fetchCards();
     final card = _service.matchCardByLastFour(cards, parsed.cardLastFour);
 
-    await _service.createTransaction(parsed, cardId: card?.id, rawText: rawText);
+    await _service.createTransaction(parsed,
+        cardId: card?.id, rawText: rawText);
     await _service.markProcessed(key);
   }
 }

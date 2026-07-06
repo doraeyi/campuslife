@@ -19,7 +19,8 @@ class CtbcParser implements BankNotificationParser {
 
   static final _cardLastFourLabeled = RegExp(r'卡末四碼[:：]?\s*(\d{4})');
   static final _merchantLabeled = RegExp(r'商店名稱[:：]?\s*(.+)');
-  static final _dateTime = RegExp(r'(\d{4})[/\-](\d{1,2})[/\-](\d{1,2})\s+(\d{1,2}):(\d{2})');
+  static final _dateTime =
+      RegExp(r'(\d{4})[/\-](\d{1,2})[/\-](\d{1,2})\s+(\d{1,2}):(\d{2})');
   // OCR 常把 "$" 認成 "S"，NT 跟金額之間的符號盡量放寬
   static final _amount = RegExp(r'NT\s*[\$Ss]?\s*(\d[\d,]*(?:\.\d+)?)');
 
@@ -28,7 +29,9 @@ class CtbcParser implements BankNotificationParser {
     if (!_amount.hasMatch(rawText)) return false;
     final time = _parseDateTime(rawText);
     return _cardLastFourLabeled.hasMatch(rawText) ||
-        _findStandaloneFourDigits(rawText, excludeYear: time?.year.toString()) != null;
+        _findStandaloneFourDigits(rawText,
+                excludeYear: time?.year.toString()) !=
+            null;
   }
 
   @override
@@ -41,7 +44,8 @@ class CtbcParser implements BankNotificationParser {
     final time = _parseDateTime(rawText);
     final cardLastFour = _cardLastFourLabeled.firstMatch(rawText)?.group(1) ??
         _findStandaloneFourDigits(rawText, excludeYear: time?.year.toString());
-    final merchant = _merchantLabeled.firstMatch(rawText)?.group(1)?.trim() ?? '中國信託消費';
+    final merchant =
+        _merchantLabeled.firstMatch(rawText)?.group(1)?.trim() ?? '中國信託消費';
 
     return ParsedBankTransaction(
       bankId: bankId,

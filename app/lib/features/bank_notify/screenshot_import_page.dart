@@ -9,10 +9,12 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 
+import '../../models/card_model.dart';
 import '../../models/pending_screenshot.dart';
 import '../../services/api_client.dart';
 import '../settings/providers/settings_provider.dart';
 import 'android_notification_listener.dart';
+import 'bank_notify_auto_processor.dart';
 import 'bank_notify_service.dart';
 import 'parsers/bank_notification_parser.dart';
 import 'parsers/parser_registry.dart';
@@ -40,19 +42,29 @@ class ScreenshotImportPage extends HookConsumerWidget {
 
     final pending = useState<List<PendingScreenshot>>([]);
     final loadingPending = useState(true);
+    final previews = useState<Map<int, BankNotifyPreview>>({});
+    final quickRecordingIds = useState<Set<int>>({});
+
+    Future<void> loadPreviews(List<PendingScreenshot> items) async {
+      for (final item in items) {
+        if (previews.value.containsKey(item.id)) continue;
+        final preview = await BankNotifyAutoProcessor().loadPreview(item);
+        previews.value = {...previews.value, item.id: preview};
+      }
+    }
 
     Future<void> refreshPending() async {
       loadingPending.value = true;
       try {
-        // 先跑一輪自動處理（如果是直接進這頁、還沒經過首頁鈴鐺觸發過的話），
-        // 這樣清單顯示的就只會是真的辨識失敗、需要手動處理的項目
-        await ref.read(bankNotifyPendingCountProvider.notifier).refresh();
-        pending.value = await ApiClient().fetchPendingScreenshots();
+        final list = await ApiClient().fetchPendingScreenshots();
+        pending.value = list;
+        ref.invalidate(bankNotifyPendingCountProvider);
       } catch (_) {
         // 忽略：使用者沒綁定 LINE 或暫時連不上都不影響其他功能
       } finally {
         loadingPending.value = false;
       }
+      loadPreviews(pending.value);
     }
 
     useEffect(() {
@@ -68,8 +80,10 @@ class ScreenshotImportPage extends HookConsumerWidget {
       message.value = null;
 
       try {
-        final recognizer = TextRecognizer(script: TextRecognitionScript.chinese);
-        final result = await recognizer.processImage(InputImage.fromFilePath(file.path));
+        final recognizer =
+            TextRecognizer(script: TextRecognitionScript.chinese);
+        final result =
+            await recognizer.processImage(InputImage.fromFilePath(file.path));
         await recognizer.close();
         recognizedText.value = result.text;
 
@@ -78,7 +92,8 @@ class ScreenshotImportPage extends HookConsumerWidget {
         if (match != null) {
           amountCtrl.text = match.amount.toStringAsFixed(0);
           merchantCtrl.text = match.merchant;
-          final matchedCard = service.matchCardByLastFour(cards, match.cardLastFour);
+          final matchedCard =
+              service.matchCardByLastFour(cards, match.cardLastFour);
           selectedCardId.value = matchedCard?.id;
         } else {
           message.value = '無法從這張截圖辨識出銀行消費通知，請確認截圖包含完整卡片內容（商店名稱、金額、卡末四碼）';
@@ -98,12 +113,14 @@ class ScreenshotImportPage extends HookConsumerWidget {
       await recognizeFile(File(image.path));
     }
 
+    // 手動處理：只有 OCR 辨識不出來的項目才會走到這裡（需要人工看圖填欄位）
     Future<void> processPending(PendingScreenshot item) async {
       recognizing.value = true;
       message.value = null;
       try {
         final bytes = await ApiClient().fetchPendingScreenshotImage(item.id);
-        final tempDir = await Directory.systemTemp.createTemp('yiwallet_pending');
+        final tempDir =
+            await Directory.systemTemp.createTemp('yiwallet_pending');
         final file = File('${tempDir.path}/${item.id}.jpg');
         await file.writeAsBytes(bytes);
         activePendingId.value = item.id;
@@ -147,10 +164,12 @@ class ScreenshotImportPage extends HookConsumerWidget {
 
         if (activePendingId.value != null) {
           await ApiClient().deletePendingScreenshot(activePendingId.value!);
+          previews.value = {...previews.value}..remove(activePendingId.value);
           await refreshPending();
         }
 
-        message.value = '已建立交易：${merchantCtrl.text.trim()} -\$${amount.toStringAsFixed(0)}';
+        message.value =
+            '已建立交易：${merchantCtrl.text.trim()} -\$${amount.toStringAsFixed(0)}';
         pickedImage.value = null;
         parsed.value = null;
         recognizedText.value = null;
@@ -162,10 +181,54 @@ class ScreenshotImportPage extends HookConsumerWidget {
       }
     }
 
+    // 一鍵入帳：清單裡已經辨識成功的項目，一按就直接建立交易，不用再開一次編輯畫面
+    Future<void> quickRecord(BankNotifyPreview preview) async {
+      final p = preview.parsed;
+      if (p == null) return;
+
+      quickRecordingIds.value = {...quickRecordingIds.value, preview.item.id};
+      try {
+        final key = service.buildDedupKey(p);
+        String resultMessage;
+        if (await service.isAlreadyProcessed(key)) {
+          await ApiClient().deletePendingScreenshot(preview.item.id);
+          resultMessage = '這筆之前已經記過帳了，已從清單移除';
+        } else {
+          final card = service.matchCardByLastFour(cards, p.cardLastFour);
+          await service.createTransaction(p,
+              cardId: card?.id, rawText: preview.rawText);
+          await service.markProcessed(key);
+          final summary = '${p.merchant} -\$${p.amount.toStringAsFixed(0)}'
+              '${card != null ? '・${card.name}' : ''}';
+          await ApiClient()
+              .notifyPendingScreenshotDone(preview.item.id, '✅ 已記帳：$summary');
+          resultMessage = '已建立交易：$summary';
+        }
+
+        pending.value =
+            pending.value.where((it) => it.id != preview.item.id).toList();
+        previews.value = {...previews.value}..remove(preview.item.id);
+        ref.invalidate(bankNotifyPendingCountProvider);
+        if (context.mounted) {
+          ScaffoldMessenger.of(context)
+              .showSnackBar(SnackBar(content: Text(resultMessage)));
+        }
+      } catch (e) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context)
+              .showSnackBar(SnackBar(content: Text('建立交易失敗：$e')));
+        }
+      } finally {
+        quickRecordingIds.value = {...quickRecordingIds.value}
+          ..remove(preview.item.id);
+      }
+    }
+
     const howToUseText =
         '收到銀行 LINE 消費通知後，最快的方式是直接在 LINE 裡把那則卡片截圖轉傳給 YiWallet 的 '
-        'LINE Bot（跟平常「茶葉蛋 10」記帳是同一個聊天室），截圖會出現在下面的待確認清單。'
-        '也可以自己截圖後從相簿選圖匯入。目前支援：中國信託。';
+        'LINE Bot（跟平常「茶葉蛋 10」記帳是同一個聊天室），截圖會出現在下面的待確認清單，'
+        '辨識成功的話按「一鍵入帳」就好，不用自己輸入。也可以自己截圖後從相簿選圖匯入。'
+        '目前支援：中國信託。';
 
     return Scaffold(
       appBar: AppBar(
@@ -178,9 +241,12 @@ class ScreenshotImportPage extends HookConsumerWidget {
               context: context,
               builder: (ctx) => AlertDialog(
                 title: const Text('怎麼用'),
-                content: const Text(howToUseText, style: TextStyle(height: 1.5)),
+                content:
+                    const Text(howToUseText, style: TextStyle(height: 1.5)),
                 actions: [
-                  TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('知道了')),
+                  TextButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      child: const Text('知道了')),
                 ],
               ),
             ),
@@ -199,7 +265,8 @@ class ScreenshotImportPage extends HookConsumerWidget {
               const SizedBox(height: 20),
               Row(
                 children: [
-                  const Text('待確認截圖（LINE 轉傳）', style: TextStyle(fontWeight: FontWeight.w500)),
+                  const Text('待確認截圖（LINE 轉傳）',
+                      style: TextStyle(fontWeight: FontWeight.w500)),
                   const Spacer(),
                   IconButton(
                     icon: const Icon(Icons.refresh_rounded, size: 20),
@@ -210,31 +277,36 @@ class ScreenshotImportPage extends HookConsumerWidget {
               if (loadingPending.value)
                 const Padding(
                   padding: EdgeInsets.symmetric(vertical: 12),
-                  child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                  child:
+                      Center(child: CircularProgressIndicator(strokeWidth: 2)),
                 )
               else if (pending.value.isEmpty)
                 const Padding(
                   padding: EdgeInsets.symmetric(vertical: 8),
-                  child: Text('目前沒有待確認的截圖', style: TextStyle(color: Colors.grey, fontSize: 13)),
+                  child: Text('目前沒有待確認的截圖',
+                      style: TextStyle(color: Colors.grey, fontSize: 13)),
                 )
               else
-                ...pending.value.map((item) => Card(
-                      margin: const EdgeInsets.only(bottom: 8),
-                      child: ListTile(
-                        leading: const Icon(Icons.image_outlined),
-                        title: Text(DateFormat('MM/dd HH:mm').format(item.createdAt.toLocal())),
-                        trailing: FilledButton(
-                          onPressed: recognizing.value ? null : () => processPending(item),
-                          child: const Text('處理'),
-                        ),
-                      ),
+                ...pending.value.map((item) => _PendingItemCard(
+                      item: item,
+                      preview: previews.value[item.id],
+                      matchedCard: previews.value[item.id]?.parsed != null
+                          ? service.matchCardByLastFour(cards,
+                              previews.value[item.id]!.parsed!.cardLastFour)
+                          : null,
+                      isRecording: quickRecordingIds.value.contains(item.id),
+                      onQuickRecord: () =>
+                          quickRecord(previews.value[item.id]!),
+                      onManualProcess:
+                          recognizing.value ? null : () => processPending(item),
                     )),
               const SizedBox(height: 12),
               OutlinedButton.icon(
                 onPressed: recognizing.value ? null : pickAndRecognize,
                 icon: const Icon(Icons.image_search_rounded),
                 label: const Text('從相簿選擇截圖'),
-                style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+                style: OutlinedButton.styleFrom(
+                    minimumSize: const Size.fromHeight(48)),
               ),
               Center(
                 child: TextButton(
@@ -248,20 +320,25 @@ class ScreenshotImportPage extends HookConsumerWidget {
                           '可以用這個清掉本機的判斷紀錄，讓下次轉傳重新處理一次。',
                         ),
                         actions: [
-                          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
-                          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('清除')),
+                          TextButton(
+                              onPressed: () => Navigator.pop(ctx, false),
+                              child: const Text('取消')),
+                          TextButton(
+                              onPressed: () => Navigator.pop(ctx, true),
+                              child: const Text('清除')),
                         ],
                       ),
                     );
                     if (ok == true) {
                       await service.clearProcessedKeys();
                       if (context.mounted) {
-                        ScaffoldMessenger.of(context)
-                            .showSnackBar(const SnackBar(content: Text('已清除本機去重紀錄')));
+                        ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('已清除本機去重紀錄')));
                       }
                     }
                   },
-                  child: const Text('清除本機去重紀錄', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                  child: const Text('清除本機去重紀錄',
+                      style: TextStyle(fontSize: 12, color: Colors.grey)),
                 ),
               ),
               if (recognizing.value) ...[
@@ -272,12 +349,14 @@ class ScreenshotImportPage extends HookConsumerWidget {
                 const SizedBox(height: 16),
                 ClipRRect(
                   borderRadius: BorderRadius.circular(12),
-                  child: Image.file(pickedImage.value!, height: 160, fit: BoxFit.cover),
+                  child: Image.file(pickedImage.value!,
+                      height: 160, fit: BoxFit.cover),
                 ),
               ],
               if (parsed.value != null) ...[
                 const SizedBox(height: 20),
-                const Text('確認記帳內容', style: TextStyle(fontWeight: FontWeight.w500)),
+                const Text('確認記帳內容',
+                    style: TextStyle(fontWeight: FontWeight.w500)),
                 const SizedBox(height: 8),
                 TextField(
                   controller: merchantCtrl,
@@ -290,7 +369,8 @@ class ScreenshotImportPage extends HookConsumerWidget {
                 const SizedBox(height: 12),
                 TextField(
                   controller: amountCtrl,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
                   decoration: const InputDecoration(
                     labelText: '金額',
                     prefixText: '\$ ',
@@ -305,23 +385,28 @@ class ScreenshotImportPage extends HookConsumerWidget {
                     labelText: '記到哪張卡片',
                     border: OutlineInputBorder(),
                     isDense: true,
-                    contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    contentPadding:
+                        EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                   ),
                   items: [
-                    const DropdownMenuItem<int?>(value: null, child: Text('不指定卡片')),
-                    ...cards.map((c) => DropdownMenuItem<int?>(value: c.id, child: Text(c.name))),
+                    const DropdownMenuItem<int?>(
+                        value: null, child: Text('不指定卡片')),
+                    ...cards.map((c) => DropdownMenuItem<int?>(
+                        value: c.id, child: Text(c.name))),
                   ],
                   onChanged: (v) => selectedCardId.value = v,
                 ),
                 const SizedBox(height: 16),
                 FilledButton(
                   onPressed: creating.value ? null : confirmAndCreate,
-                  style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+                  style: FilledButton.styleFrom(
+                      minimumSize: const Size.fromHeight(48)),
                   child: creating.value
                       ? const SizedBox(
                           width: 20,
                           height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: Colors.white),
                         )
                       : const Text('確認建立交易'),
                 ),
@@ -330,7 +415,8 @@ class ScreenshotImportPage extends HookConsumerWidget {
                 const SizedBox(height: 16),
                 Text(message.value!, style: const TextStyle(color: Colors.red)),
               ],
-              if (recognizedText.value != null && (kDebugMode || parsed.value == null)) ...[
+              if (recognizedText.value != null &&
+                  (kDebugMode || parsed.value == null)) ...[
                 const SizedBox(height: 20),
                 Row(
                   children: [
@@ -338,8 +424,10 @@ class ScreenshotImportPage extends HookConsumerWidget {
                         style: TextStyle(fontSize: 12, color: Colors.grey)),
                     const Spacer(),
                     IconButton(
-                      icon: const Icon(Icons.copy_rounded, size: 16, color: Colors.grey),
-                      onPressed: () => Clipboard.setData(ClipboardData(text: recognizedText.value!)),
+                      icon: const Icon(Icons.copy_rounded,
+                          size: 16, color: Colors.grey),
+                      onPressed: () => Clipboard.setData(
+                          ClipboardData(text: recognizedText.value!)),
                       tooltip: '複製',
                       constraints: const BoxConstraints(),
                       padding: const EdgeInsets.all(4),
@@ -347,11 +435,81 @@ class ScreenshotImportPage extends HookConsumerWidget {
                   ],
                 ),
                 const SizedBox(height: 4),
-                SelectableText(recognizedText.value!, style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                SelectableText(recognizedText.value!,
+                    style: const TextStyle(fontSize: 11, color: Colors.grey)),
               ],
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// One row in the "待確認截圖" list. Shows a spinner while OCR is still
+/// running, a "一鍵入帳" button the moment a preview parses cleanly, or a
+/// "手動處理" fallback when OCR couldn't make sense of the screenshot.
+class _PendingItemCard extends StatelessWidget {
+  const _PendingItemCard({
+    required this.item,
+    required this.preview,
+    required this.matchedCard,
+    required this.isRecording,
+    required this.onQuickRecord,
+    required this.onManualProcess,
+  });
+
+  final PendingScreenshot item;
+  final BankNotifyPreview? preview;
+  final AppCard? matchedCard;
+  final bool isRecording;
+  final VoidCallback onQuickRecord;
+  final VoidCallback? onManualProcess;
+
+  @override
+  Widget build(BuildContext context) {
+    Widget subtitle;
+    Widget trailing;
+
+    if (preview == null) {
+      subtitle = const Text('辨識中…',
+          style: TextStyle(fontSize: 12, color: Colors.grey));
+      trailing = const SizedBox(
+        width: 20,
+        height: 20,
+        child: CircularProgressIndicator(strokeWidth: 2),
+      );
+    } else if (preview!.parsed == null) {
+      subtitle = const Text('無法自動辨識，需手動處理',
+          style: TextStyle(fontSize: 12, color: Colors.orange));
+      trailing =
+          OutlinedButton(onPressed: onManualProcess, child: const Text('手動處理'));
+    } else {
+      final p = preview!.parsed!;
+      subtitle = Text(
+        '${p.merchant} -\$${p.amount.toStringAsFixed(0)}${matchedCard != null ? '・${matchedCard!.name}' : ''}',
+        style: const TextStyle(fontSize: 12),
+      );
+      trailing = FilledButton(
+        onPressed: isRecording ? null : onQuickRecord,
+        child: isRecording
+            ? const SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(
+                    strokeWidth: 2, color: Colors.white),
+              )
+            : const Text('一鍵入帳'),
+      );
+    }
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: ListTile(
+        leading: const Icon(Icons.image_outlined),
+        title: Text(DateFormat('MM/dd HH:mm').format(item.createdAt.toLocal())),
+        subtitle: subtitle,
+        trailing: trailing,
       ),
     );
   }
@@ -393,9 +551,7 @@ class _AndroidAutoListenCard extends HookWidget {
         contentPadding: EdgeInsets.zero,
         title: const Text('開啟全自動監聽（進階）'),
         subtitle: Text(
-          granted.value == true
-              ? '通知使用權已開啟，收到通知會自動記帳'
-              : '需要到系統設定開啟「通知使用權」才會生效',
+          granted.value == true ? '通知使用權已開啟，收到通知會自動記帳' : '需要到系統設定開啟「通知使用權」才會生效',
           style: const TextStyle(fontSize: 12),
         ),
         value: enabled.value!,

@@ -63,7 +63,9 @@ class BankNotifyService {
     int? cardId,
     String? rawText,
   }) {
-    final debugNote = rawText != null && rawText.length > 200 ? rawText.substring(0, 200) : rawText;
+    final debugNote = rawText != null && rawText.length > 200
+        ? rawText.substring(0, 200)
+        : rawText;
     return ApiClient().createTransaction(
       cardId: cardId,
       amount: parsed.amount,
