@@ -1,4 +1,9 @@
 import os
+import random
+import smtplib
+import string
+from datetime import datetime, timedelta, timezone
+from email.mime.text import MIMEText
 
 import requests as http_requests
 from fastapi import APIRouter, Depends, HTTPException
@@ -16,6 +21,24 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")  # Web client（後端 / Web 版 App 用）
 GOOGLE_IOS_CLIENT_ID = os.getenv("GOOGLE_IOS_CLIENT_ID")
 GOOGLE_ANDROID_CLIENT_ID = os.getenv("GOOGLE_ANDROID_CLIENT_ID")
+
+_SMTP_HOST = os.getenv("SMTP_HOST")
+_SMTP_PORT = int(os.getenv("SMTP_PORT", "465"))
+_SMTP_USER = os.getenv("SMTP_USER")
+_SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")
+_SMTP_FROM = os.getenv("SMTP_FROM", _SMTP_USER or "")
+
+
+def _send_reset_email(to_email: str, code: str):
+    if not (_SMTP_HOST and _SMTP_USER and _SMTP_PASSWORD):
+        raise HTTPException(status_code=503, detail="伺服器尚未設定寄信服務")
+    msg = MIMEText(f"你的 YiWallet 重設密碼驗證碼是：{code}\n10 分鐘內有效，如果不是你本人操作請忽略這封信。")
+    msg["Subject"] = "YiWallet 重設密碼"
+    msg["From"] = _SMTP_FROM
+    msg["To"] = to_email
+    with smtplib.SMTP_SSL(_SMTP_HOST, _SMTP_PORT) as server:
+        server.login(_SMTP_USER, _SMTP_PASSWORD)
+        server.sendmail(_SMTP_FROM, [to_email], msg.as_string())
 
 # 每個平台（Web / iOS / Android）原生 SDK 簽發的 idToken，aud（受眾）欄位
 # 會是「該平台自己的」OAuth Client ID，不是統一的 Web Client ID，
@@ -122,6 +145,41 @@ def google_login(payload: schemas.GoogleAuthPayload, db: Session = Depends(get_d
 
     token = create_access_token(user.id)
     return schemas.Token(access_token=token, user=user)
+
+
+@router.post("/forgot-password")
+def forgot_password(payload: schemas.ForgotPasswordRequest, db: Session = Depends(get_db)):
+    user = db.query(models.User).filter(models.User.email == payload.email).first()
+    if user is not None:
+        code = "".join(random.choices(string.digits, k=6))
+        user.reset_code = code
+        user.reset_code_expires_at = datetime.now(timezone.utc) + timedelta(minutes=10)
+        db.commit()
+        _send_reset_email(user.email, code)
+    # 不管帳號存不存在都回同樣的訊息，避免被拿來探測哪些 email 有註冊
+    return {"status": "ok"}
+
+
+@router.post("/reset-password")
+def reset_password(payload: schemas.ResetPasswordRequest, db: Session = Depends(get_db)):
+    now = datetime.now(timezone.utc)
+    user = (
+        db.query(models.User)
+        .filter(
+            models.User.email == payload.email,
+            models.User.reset_code == payload.code,
+            models.User.reset_code_expires_at > now,
+        )
+        .first()
+    )
+    if user is None:
+        raise HTTPException(status_code=400, detail="驗證碼錯誤或已過期")
+
+    user.password_hash = hash_password(payload.new_password)
+    user.reset_code = None
+    user.reset_code_expires_at = None
+    db.commit()
+    return {"status": "ok"}
 
 
 @router.get("/me", response_model=schemas.UserRead)

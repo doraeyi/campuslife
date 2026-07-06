@@ -1,13 +1,17 @@
 import 'dart:convert';
+import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/card_model.dart';
+import '../models/einvoice.dart';
 import '../models/friend_shift.dart';
 import '../models/group_shift.dart';
 import '../models/income.dart';
 import '../models/job.dart';
+import '../models/pending_screenshot.dart';
 import '../models/settings_models.dart';
 import '../models/shift.dart';
 import '../models/transaction.dart';
@@ -434,6 +438,52 @@ class ApiClient {
       headers: await _authHeaders(),
     );
     if (response.statusCode != 200) throw Exception('刪除交易失敗');
+  }
+
+  // ── E-Invoice CSV 匯入 ────────────────────────────────────────────────────
+
+  Future<EinvoiceImportResult> importEinvoiceCsv(File file, {int? cardId}) async {
+    final uri = Uri.parse('$baseUrl/einvoice/import').replace(
+      queryParameters: cardId != null ? {'card_id': '$cardId'} : null,
+    );
+    final request = http.MultipartRequest('POST', uri);
+    final authHeaders = await _authHeaders();
+    authHeaders.remove('Content-Type');
+    request.headers.addAll(authHeaders);
+    request.files.add(await http.MultipartFile.fromPath('file', file.path));
+
+    final streamed = await request.send();
+    final response = await http.Response.fromStream(streamed);
+    if (response.statusCode != 200) throw Exception('匯入發票失敗');
+    return EinvoiceImportResult.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+  }
+
+  // ── 待確認截圖（透過 LINE 轉傳給 Bot）─────────────────────────────────────
+
+  Future<List<PendingScreenshot>> fetchPendingScreenshots() async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/bank-notify/pending'),
+      headers: await _authHeaders(),
+    );
+    if (response.statusCode != 200) throw Exception('載入待確認截圖失敗');
+    final List<dynamic> data = jsonDecode(response.body);
+    return data.map((json) => PendingScreenshot.fromJson(json as Map<String, dynamic>)).toList();
+  }
+
+  Future<Uint8List> fetchPendingScreenshotImage(int id) async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/bank-notify/pending/$id/image'),
+      headers: await _authHeaders(),
+    );
+    if (response.statusCode != 200) throw Exception('載入截圖失敗');
+    return response.bodyBytes;
+  }
+
+  Future<void> deletePendingScreenshot(int id) async {
+    await http.delete(
+      Uri.parse('$baseUrl/bank-notify/pending/$id'),
+      headers: await _authHeaders(),
+    );
   }
 
   Future<AppCard> updateCardBalance(int cardId, double balance) async {

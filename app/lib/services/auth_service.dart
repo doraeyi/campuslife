@@ -87,6 +87,34 @@ class AuthService {
     return _handleAuthResponse(response);
   }
 
+  Future<void> forgotPassword({required String email}) async {
+    final response = await http.post(
+      Uri.parse('${ApiClient.baseUrl}/auth/forgot-password'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'email': email}),
+    );
+    if (response.statusCode != 200) {
+      final body = jsonDecode(response.body);
+      throw Exception(body['detail'] ?? '寄送驗證碼失敗');
+    }
+  }
+
+  Future<void> resetPassword({
+    required String email,
+    required String code,
+    required String newPassword,
+  }) async {
+    final response = await http.post(
+      Uri.parse('${ApiClient.baseUrl}/auth/reset-password'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'email': email, 'code': code, 'new_password': newPassword}),
+    );
+    if (response.statusCode != 200) {
+      final body = jsonDecode(response.body);
+      throw Exception(body['detail'] ?? '重設密碼失敗');
+    }
+  }
+
   Future<void> logout() async {
     await _googleSignIn.signOut();
     final prefs = await SharedPreferences.getInstance();

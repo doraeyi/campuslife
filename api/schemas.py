@@ -124,6 +124,7 @@ class UserRead(BaseModel):
     id: int
     email: EmailStr
     display_name: str
+    picture: str | None = None
 
 
 class Token(BaseModel):
@@ -173,6 +174,16 @@ class HasPasswordRead(BaseModel):
 
 class PasswordUpdate(BaseModel):
     current_password: str
+    new_password: str
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordRequest(BaseModel):
+    email: EmailStr
+    code: str
     new_password: str
 
 

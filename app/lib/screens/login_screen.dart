@@ -30,17 +30,19 @@ class LoginScreen extends HookConsumerWidget {
       isLoading.value = true;
       errorMsg.value  = null;
 
-      try {
-        await ref.read(authProvider.notifier).login(
-          email: email,
-          password: password,
-        );
-        if (context.mounted) context.go('/dashboard');
-      } catch (e) {
-        errorMsg.value = e.toString().replaceFirst('Exception: ', '');
-      } finally {
-        isLoading.value = false;
+      // AuthNotifier.login() 用 AsyncValue.guard 包錯誤，不會往外丟例外，
+      // 所以登入失敗與否要看 provider 的 state，不能靠 try/catch。
+      await ref.read(authProvider.notifier).login(
+        email: email,
+        password: password,
+      );
+      final state = ref.read(authProvider);
+      if (state.hasError) {
+        errorMsg.value = state.error.toString().replaceFirst('Exception: ', '');
+      } else if (context.mounted) {
+        context.go('/dashboard');
       }
+      isLoading.value = false;
     }
 
     Future<void> submitWithGoogle() async {
@@ -112,6 +114,19 @@ class LoginScreen extends HookConsumerWidget {
                         obscureText: true,
                         textInputAction: TextInputAction.done,
                         onSubmitted: (_) => submit(),
+                      ),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton(
+                          onPressed: () => context.push('/forgot-password'),
+                          style: TextButton.styleFrom(
+                            foregroundColor: _kOrange,
+                            padding: EdgeInsets.zero,
+                            minimumSize: const Size(0, 32),
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                          child: const Text('忘記密碼？', style: TextStyle(fontSize: 13)),
+                        ),
                       ),
                       if (errorMsg.value != null) ...[
                         const SizedBox(height: 12),

@@ -84,25 +84,6 @@ class SettingsPage extends HookConsumerWidget {
               ),
               const SizedBox(height: 24),
 
-              // ── 好友 ──────────────────────────────────────────────────
-              _SectionTitle('社群'),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Material(
-                  elevation: 1,
-                  borderRadius: BorderRadius.circular(20),
-                  child: ListTile(
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                    leading: const Icon(Icons.group_rounded, color: Color(0xFF8B5CF6)),
-                    title: const Text('好友管理'),
-                    subtitle: const Text('新增好友・共享班表群組'),
-                    trailing: const Icon(Icons.chevron_right_rounded, color: Color(0xFFD1D5DB)),
-                    onTap: () => context.push('/friends'),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 24),
-
               // ── 功能 ──────────────────────────────────────────────────
               _SectionTitle('功能'),
               Padding(

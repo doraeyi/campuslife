@@ -20,7 +20,7 @@ const _kLeftDests = <_Dest>[
 ];
 
 const _kRightDests = <_Dest>[
-  (icon: Icons.group_rounded,          label: '好友', path: '/friends'),
+  (icon: Icons.auto_awesome_rounded,   label: '自動記帳', path: '/auto-bookkeeping'),
   (icon: Icons.settings_rounded,       label: '設定', path: '/settings'),
 ];
 

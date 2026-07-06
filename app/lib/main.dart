@@ -1,7 +1,11 @@
+import 'dart:io';
+
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:intl/date_symbol_data_local.dart';
 
+import 'features/bank_notify/android_notification_listener.dart';
 import 'router.dart';
 import 'services/notification_service.dart';
 
@@ -9,6 +13,10 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await initializeDateFormatting('zh_TW');
   await NotificationService().init();
+  if (!kIsWeb && Platform.isAndroid) {
+    final listener = AndroidBankNotificationListener();
+    if (await listener.isEnabled()) listener.start();
+  }
   runApp(const ProviderScope(child: CampusLifeApp()));
 }
 

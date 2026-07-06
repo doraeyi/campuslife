@@ -32,6 +32,17 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+
+        <!-- 銀行通知記帳（進階選用功能）：使用者需在系統設定手動開啟「通知使用權」才會生效 -->
+        <service
+            android:name=".BankNotificationListenerService"
+            android:label="YiWallet 銀行通知記帳"
+            android:exported="false"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService"/>
+            </intent-filter>
+        </service>
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and

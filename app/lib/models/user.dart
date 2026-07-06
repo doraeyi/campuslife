@@ -2,14 +2,16 @@ class AppUser {
   final int id;
   final String email;
   final String displayName;
+  final String? picture;
 
-  AppUser({required this.id, required this.email, required this.displayName});
+  AppUser({required this.id, required this.email, required this.displayName, this.picture});
 
   factory AppUser.fromJson(Map<String, dynamic> json) {
     return AppUser(
       id: json['id'] as int,
       email: json['email'] as String,
       displayName: json['display_name'] as String,
+      picture: json['picture'] as String?,
     );
   }
 }

@@ -1,8 +1,12 @@
 import 'package:go_router/go_router.dart';
 
+import 'features/auto_bookkeeping/auto_bookkeeping_hub_page.dart';
+import 'features/bank_notify/screenshot_import_page.dart';
+import 'features/einvoice/einvoice_import_page.dart';
 import 'features/settings/profile_page.dart';
 import 'features/settings/settings_page.dart';
 import 'screens/app_scaffold.dart';
+import 'screens/forgot_password_screen.dart';
 import 'screens/friend_schedule_screen.dart';
 import 'screens/friends_screen.dart';
 import 'screens/home_tab.dart';
@@ -20,7 +24,7 @@ final appRouter = GoRouter(
     final user = await AuthService().currentUser();
     final isLoggedIn = user != null;
     final loc = state.matchedLocation;
-    final isAuthRoute = loc == '/login' || loc == '/register';
+    final isAuthRoute = loc == '/login' || loc == '/register' || loc == '/forgot-password';
 
     if (!isLoggedIn && !isAuthRoute) return '/login';
     if (isLoggedIn && isAuthRoute) return '/dashboard';
@@ -36,11 +40,23 @@ final appRouter = GoRouter(
       path: '/register',
       builder: (_, __) => const RegisterScreen(),
     ),
+    GoRoute(
+      path: '/forgot-password',
+      builder: (_, __) => const ForgotPasswordScreen(),
+    ),
 
     // ── Full-screen routes (no shell) ───────────────────────────────────
     GoRoute(
       path: '/settings/profile',
       builder: (_, __) => const ProfilePage(),
+    ),
+    GoRoute(
+      path: '/settings/einvoice-import',
+      builder: (_, __) => const EinvoiceImportPage(),
+    ),
+    GoRoute(
+      path: '/settings/bank-notify',
+      builder: (_, __) => const ScreenshotImportPage(),
     ),
 
     // ── Main shell ──────────────────────────────────────────────────────
@@ -82,6 +98,10 @@ final appRouter = GoRouter(
         GoRoute(
           path: '/settings',
           pageBuilder: (_, __) => const NoTransitionPage(child: SettingsPage()),
+        ),
+        GoRoute(
+          path: '/auto-bookkeeping',
+          pageBuilder: (_, __) => const NoTransitionPage(child: AutoBookkeepingHubPage()),
         ),
       ],
     ),

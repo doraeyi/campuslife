@@ -5,7 +5,6 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../models/card_model.dart';
-import '../models/shift.dart';
 import '../models/transaction.dart';
 import '../providers/auth_provider.dart';
 import '../services/api_client.dart';
@@ -19,7 +18,6 @@ class HomeTab extends ConsumerStatefulWidget {
 
 class _HomeTabState extends ConsumerState<HomeTab> {
   final _api = ApiClient();
-  List<Shift> _shifts = [];
   List<AppCard> _cards = [];
   List<Transaction> _transactions = [];
   bool _loading = true;
@@ -42,15 +40,13 @@ class _HomeTabState extends ConsumerState<HomeTab> {
   Future<void> _load() async {
     try {
       final results = await Future.wait([
-        _api.fetchShifts(),
         _api.fetchCards(),
         _api.fetchTransactions(),
       ]);
       if (mounted) {
         setState(() {
-          _shifts = results[0] as List<Shift>;
-          _cards = results[1] as List<AppCard>;
-          _transactions = results[2] as List<Transaction>;
+          _cards = results[0] as List<AppCard>;
+          _transactions = results[1] as List<Transaction>;
           _loading = false;
         });
       }
@@ -268,11 +264,6 @@ class _HomeTabState extends ConsumerState<HomeTab> {
                               ),
                             ),
                           ),
-
-                        const SizedBox(height: 20),
-
-                        // ── 下一個班次 ─────────────────────────────────────
-                        _NextShiftCard(shifts: _shifts),
 
                         const SizedBox(height: 20),
 
@@ -530,76 +521,6 @@ class _TopStat extends StatelessWidget {
               fontSize: 18, fontWeight: FontWeight.w700, color: color),
         ),
       ],
-    );
-  }
-}
-
-// ── Next shift ────────────────────────────────────────────────────────────────
-
-class _NextShiftCard extends StatelessWidget {
-  const _NextShiftCard({required this.shifts});
-  final List<Shift> shifts;
-
-  @override
-  Widget build(BuildContext context) {
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final upcoming = shifts.where((s) => !s.date.isBefore(today)).toList()
-      ..sort((a, b) => a.date.compareTo(b.date));
-    final next = upcoming.isEmpty ? null : upcoming.first;
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surfaceContainer,
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 38,
-              height: 38,
-              decoration: BoxDecoration(
-                color: next?.job != null
-                    ? next!.job!.color.withValues(alpha: 0.15)
-                    : Theme.of(context).colorScheme.primaryContainer,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Icon(
-                Icons.work_outline_rounded,
-                size: 18,
-                color: next?.job != null
-                    ? next!.job!.color
-                    : Theme.of(context).colorScheme.primary,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('下一個班次',
-                      style: TextStyle(
-                          fontSize: 11,
-                          color: Theme.of(context).colorScheme.outline)),
-                  const SizedBox(height: 2),
-                  Text(
-                    next == null
-                        ? '目前沒有排班'
-                        : '${next.date.month}/${next.date.day}  '
-                            '${next.startTime.substring(0, 5)} - ${next.endTime.substring(0, 5)}'
-                            '${next.job != null ? '  ·  ${next.job!.name}' : ''}',
-                    style: const TextStyle(
-                        fontSize: 14, fontWeight: FontWeight.w600),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }

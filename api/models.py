@@ -1,4 +1,5 @@
-from sqlalchemy import Boolean, Column, Date, DateTime, Float, ForeignKey, Integer, LargeBinary, String, Text, Time, UniqueConstraint
+from sqlalchemy import Boolean, Column, Date, DateTime, Float, ForeignKey, Integer, String, Text, Time, UniqueConstraint
+from sqlalchemy.dialects.mysql import LONGBLOB
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
@@ -17,6 +18,8 @@ class User(Base):
     line_user_id = Column(String(255), nullable=True, unique=True)
     line_link_code = Column(String(10), nullable=True)
     line_link_code_expires_at = Column(DateTime(timezone=True), nullable=True)
+    reset_code = Column(String(10), nullable=True)
+    reset_code_expires_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime, server_default=func.now())
 
 
@@ -133,7 +136,7 @@ class PendingBankScreenshot(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
-    image_data = Column(LargeBinary, nullable=False)
+    image_data = Column(LONGBLOB, nullable=False)
     content_type = Column(String(50), nullable=False, default="image/jpeg")
     created_at = Column(DateTime, server_default=func.now())
 

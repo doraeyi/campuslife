@@ -5,8 +5,10 @@ import '../data/shift_type_colors.dart';
 import '../data/taiwan_holidays_2026.dart';
 import '../models/job.dart';
 import '../models/shift.dart';
+import '../models/user.dart';
 import '../services/api_client.dart';
 import '../services/salary_calculator.dart';
+import '../widgets/friends_banner.dart';
 import 'add_transaction_sheet.dart';
 import 'schedule_widgets.dart';
 import '../services/notification_service.dart';
@@ -18,16 +20,6 @@ const _kTodayAmber = Color(0xFFF59E0B);
 const _kNetGreen   = Color(0xFF10B981);
 
 DateTime _dateOnly(DateTime d) => DateTime(d.year, d.month, d.day);
-
-double _shiftHoursLocal(Shift s) {
-  int toMin(String t) {
-    final p = t.split(':');
-    return int.parse(p[0]) * 60 + int.parse(p[1]);
-  }
-  var diff = toMin(s.endTime) - toMin(s.startTime);
-  if (diff < 0) diff += 24 * 60;
-  return diff / 60.0;
-}
 
 // ── ScheduleScreen ─────────────────────────────────────────────────────────
 class ScheduleScreen extends StatefulWidget {
@@ -46,6 +38,7 @@ class ScheduleScreenState extends State<ScheduleScreen> {
   DateTime _selectedDay = _dateOnly(DateTime.now());
   List<Job> _jobs = [];
   Job? _salaryJob;
+  List<Friendship> _friendships = [];
 
   bool _multiSelectMode = false;
   final Set<DateTime> _multiSelectedDays = {};
@@ -55,6 +48,14 @@ class ScheduleScreenState extends State<ScheduleScreen> {
     super.initState();
     _refresh();
     _loadJobs();
+    _loadFriendships();
+  }
+
+  Future<void> _loadFriendships() async {
+    try {
+      final friendships = await _apiClient.fetchFriendships();
+      if (mounted) setState(() => _friendships = friendships);
+    } catch (_) {}
   }
 
   Future<void> _loadJobs() async {
@@ -269,13 +270,8 @@ class ScheduleScreenState extends State<ScheduleScreen> {
                                 : _showBatchAddSheet,
                           ),
 
-                        // ── Shift summary ─────────────────────────────
-                        if (monthShifts.isNotEmpty)
-                          _ShiftSummaryCard(
-                            focusedDay: _focusedDay,
-                            monthShifts: monthShifts,
-                            jobs: _jobs,
-                          ),
+                        // ── 好友橫幅 ───────────────────────────────────
+                        FriendsBanner(friendships: _friendships),
 
                         // ── Salary card ───────────────────────────────
                         if (_salaryJob != null)
@@ -757,135 +753,6 @@ class _MultiSelectBanner extends StatelessWidget {
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-// ── Shift summary card ─────────────────────────────────────────────────────
-class _ShiftSummaryCard extends StatelessWidget {
-  const _ShiftSummaryCard({
-    required this.focusedDay,
-    required this.monthShifts,
-    required this.jobs,
-  });
-
-  final DateTime focusedDay;
-  final List<Shift> monthShifts;
-  final List<Job> jobs;
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-
-    // Group shifts by jobId
-    final byJob = <int, List<Shift>>{};
-    for (final s in monthShifts) {
-      byJob.putIfAbsent(s.jobId ?? -1, () => []).add(s);
-    }
-
-    final jobMap = {for (final j in jobs) j.id: j};
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-      child: Container(
-        decoration: BoxDecoration(
-          color: colorScheme.surface,
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.05),
-              blurRadius: 12,
-              offset: const Offset(0, 3),
-            ),
-          ],
-        ),
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Section label
-            Row(
-              children: [
-                Text(
-                  '班表摘要',
-                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                        color: colorScheme.outline,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 0.4,
-                      ),
-                ),
-                const Spacer(),
-                Text(
-                  '${focusedDay.month}月',
-                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                        color: colorScheme.outline,
-                      ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-
-            // Per-job rows
-            ...byJob.entries.map((entry) {
-              final job = jobMap[entry.key] ??
-                  entry.value.firstOrNull?.job;
-              final shifts = entry.value;
-              final totalHours =
-                  shifts.fold(0.0, (sum, s) => sum + _shiftHoursLocal(s));
-
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 10),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 10,
-                      height: 10,
-                      decoration: BoxDecoration(
-                        color: job?.color ?? _kWorkBlue,
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        job?.name ?? '工作',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 14,
-                        ),
-                      ),
-                    ),
-                    _StatPill(label: '${shifts.length} 班'),
-                    const SizedBox(width: 8),
-                    _StatPill(
-                        label: '${totalHours.toStringAsFixed(0)} 小時'),
-                  ],
-                ),
-              );
-            }),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _StatPill extends StatelessWidget {
-  const _StatPill({required this.label});
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Text(
-        label,
-        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
       ),
     );
   }
