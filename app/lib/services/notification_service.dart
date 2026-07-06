@@ -31,6 +31,17 @@ class NotificationService {
     iOS: _iosDetails,
   );
 
+  static const _generalDetails = NotificationDetails(
+    android: AndroidNotificationDetails(
+      'general',
+      '一般通知',
+      channelDescription: '信用卡還款、悠遊卡餘額、發薪日、自動記帳等即時提醒',
+      importance: Importance.high,
+      priority: Priority.high,
+    ),
+    iOS: _iosDetails,
+  );
+
   Future<void> init() async {
     if (_initialized) return;
     tz_data.initializeTimeZones();
@@ -163,11 +174,6 @@ class NotificationService {
     required String title,
     required String body,
   }) async {
-    await _plugin.show(
-      id,
-      title,
-      body,
-      const NotificationDetails(iOS: _iosDetails),
-    );
+    await _plugin.show(id, title, body, _generalDetails);
   }
 }
