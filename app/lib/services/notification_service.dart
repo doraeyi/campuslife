@@ -149,6 +149,15 @@ class NotificationService {
     }
   }
 
+  // 銀行通知截圖自動辨識、自動記帳成功時跳的通知
+  Future<void> showBankNotifyResult(String merchant, double amount) async {
+    await _show(
+      id: 500000 + DateTime.now().millisecondsSinceEpoch % 100000,
+      title: '✅ 已自動記帳',
+      body: '$merchant -\$${amount.toStringAsFixed(0)}',
+    );
+  }
+
   Future<void> _show({
     required int id,
     required String title,

@@ -16,6 +16,7 @@ import 'android_notification_listener.dart';
 import 'bank_notify_service.dart';
 import 'parsers/bank_notification_parser.dart';
 import 'parsers/parser_registry.dart';
+import 'providers/bank_notify_pending_provider.dart';
 
 class ScreenshotImportPage extends HookConsumerWidget {
   const ScreenshotImportPage({super.key});
@@ -43,6 +44,9 @@ class ScreenshotImportPage extends HookConsumerWidget {
     Future<void> refreshPending() async {
       loadingPending.value = true;
       try {
+        // 先跑一輪自動處理（如果是直接進這頁、還沒經過首頁鈴鐺觸發過的話），
+        // 這樣清單顯示的就只會是真的辨識失敗、需要手動處理的項目
+        await ref.read(bankNotifyPendingCountProvider.notifier).refresh();
         pending.value = await ApiClient().fetchPendingScreenshots();
       } catch (_) {
         // 忽略：使用者沒綁定 LINE 或暫時連不上都不影響其他功能

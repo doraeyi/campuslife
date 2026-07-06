@@ -26,6 +26,7 @@ try:
         MessagingApi,
         MessagingApiBlob,
         PostbackAction,
+        PushMessageRequest,
         QuickReply,
         QuickReplyItem,
         ReplyMessageRequest,
@@ -40,6 +41,19 @@ try:
     _LINE_AVAILABLE = True
 except ImportError:
     _LINE_AVAILABLE = False
+
+
+def push_message(line_user_id: str, text: str):
+    """Proactively send the user a LINE message (not tied to a reply token —
+    used when we've finished processing something asynchronously, e.g. the
+    app auto-recording a bank-notify screenshot well after the original
+    webhook event's reply token has expired)."""
+    if not _LINE_AVAILABLE:
+        return
+    with LineApiClient(_line_config) as client:
+        MessagingApi(client).push_message(
+            PushMessageRequest(to=line_user_id, messages=[TextMessage(text=text)])
+        )
 
 
 # ── App 端：帳號連結管理 ─────────────────────────────────────────────────────

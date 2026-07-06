@@ -1,9 +1,11 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../features/bank_notify/providers/bank_notify_pending_provider.dart';
 import '../models/card_model.dart';
 import '../models/transaction.dart';
 import '../providers/auth_provider.dart';
@@ -144,6 +146,10 @@ class _HomeTabState extends ConsumerState<HomeTab> {
                       '嗨，${user?.displayName ?? ''}',
                       style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
                     ),
+                    actions: const [
+                      _BankNotifyBell(),
+                      SizedBox(width: 8),
+                    ],
                   ),
 
                   SliverToBoxAdapter(
@@ -651,6 +657,27 @@ class _TransactionTile extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+// ── Bank-notify bell ──────────────────────────────────────────────────────────
+
+class _BankNotifyBell extends ConsumerWidget {
+  const _BankNotifyBell();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final count = ref.watch(bankNotifyPendingCountProvider).value ?? 0;
+
+    return IconButton(
+      icon: count > 0
+          ? Badge(
+              label: Text('$count'),
+              child: const Icon(Icons.notifications_outlined),
+            )
+          : const Icon(Icons.notifications_outlined),
+      onPressed: () => context.push('/settings/bank-notify'),
     );
   }
 }

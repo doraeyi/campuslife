@@ -297,6 +297,10 @@ class PendingScreenshotRead(BaseModel):
     created_at: datetime
 
 
+class NotifyPendingRequest(BaseModel):
+    summary: str
+
+
 class FriendRequestCreate(BaseModel):
     email: EmailStr
 

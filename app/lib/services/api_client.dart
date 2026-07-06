@@ -486,6 +486,14 @@ class ApiClient {
     );
   }
 
+  Future<void> notifyPendingScreenshotDone(int id, String summary) async {
+    await http.post(
+      Uri.parse('$baseUrl/bank-notify/pending/$id/notify'),
+      headers: await _authHeaders(),
+      body: jsonEncode({'summary': summary}),
+    );
+  }
+
   Future<AppCard> updateCardBalance(int cardId, double balance) async {
     final response = await http.patch(
       Uri.parse('$baseUrl/cards/$cardId/balance'),
