@@ -59,6 +59,12 @@ class NotificationService {
     await _plugin
         .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
         ?.requestNotificationsPermission();
+    // DarwinInitializationSettings 的 requestAlertPermission 等旗標理論上會在
+    // initialize() 時自動跳權限請求，但保險起見還是明確呼叫一次——如果使用者之前
+    // 不小心拒絕過，這裡不會再跳系統對話框，要去 iOS 設定裡手動打開。
+    await _plugin
+        .resolvePlatformSpecificImplementation<IOSFlutterLocalNotificationsPlugin>()
+        ?.requestPermissions(alert: true, badge: true, sound: true);
     _initialized = true;
   }
 

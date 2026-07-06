@@ -162,36 +162,38 @@ class ScreenshotImportPage extends HookConsumerWidget {
       }
     }
 
+    const howToUseText =
+        '收到銀行 LINE 消費通知後，最快的方式是直接在 LINE 裡把那則卡片截圖轉傳給 YiWallet 的 '
+        'LINE Bot（跟平常「茶葉蛋 10」記帳是同一個聊天室），截圖會出現在下面的待確認清單。'
+        '也可以自己截圖後從相簿選圖匯入。目前支援：中國信託。';
+
     return Scaffold(
-      appBar: AppBar(title: const Text('銀行通知記帳')),
+      appBar: AppBar(
+        title: const Text('銀行通知記帳'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.info_outline),
+            tooltip: '怎麼用',
+            onPressed: () => showDialog(
+              context: context,
+              builder: (ctx) => AlertDialog(
+                title: const Text('怎麼用'),
+                content: const Text(howToUseText, style: TextStyle(height: 1.5)),
+                actions: [
+                  TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('知道了')),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: const Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('怎麼用', style: TextStyle(fontWeight: FontWeight.bold)),
-                    SizedBox(height: 8),
-                    Text(
-                      '收到銀行 LINE 消費通知後，最快的方式是直接在 LINE 裡把那則卡片截圖轉傳給 YiWallet 的 '
-                      'LINE Bot（跟平常「茶葉蛋 10」記帳是同一個聊天室），截圖會出現在下面的待確認清單。'
-                      '也可以自己截圖後從相簿選圖匯入。目前支援：中國信託。',
-                      style: TextStyle(fontSize: 13, height: 1.5),
-                    ),
-                  ],
-                ),
-              ),
               if (!kIsWeb && Platform.isAndroid) ...[
-                const SizedBox(height: 16),
                 const _AndroidAutoListenCard(),
               ],
               const SizedBox(height: 20),
