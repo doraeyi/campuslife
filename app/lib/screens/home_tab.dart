@@ -10,6 +10,7 @@ import '../models/card_model.dart';
 import '../models/transaction.dart';
 import '../providers/auth_provider.dart';
 import '../services/api_client.dart';
+import 'edit_transaction_sheet.dart';
 
 class HomeTab extends ConsumerStatefulWidget {
   const HomeTab({super.key});
@@ -77,7 +78,9 @@ class _HomeTabState extends ConsumerState<HomeTab> {
     final now = DateTime.now();
     final ids = _cardsOf(type).map((c) => c.id).toSet();
     return _transactions.where((t) {
-      if (t.createdAt.year != now.year || t.createdAt.month != now.month) return false;
+      if (t.createdAt.year != now.year || t.createdAt.month != now.month) {
+        return false;
+      }
       if (type == null) return true;
       return t.cardId != null && ids.contains(t.cardId);
     }).toList();
@@ -117,6 +120,17 @@ class _HomeTabState extends ConsumerState<HomeTab> {
     await _load();
   }
 
+  Future<void> _openEditTransaction(Transaction tx) async {
+    final updated = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      useRootNavigator: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => EditTransactionSheet(transaction: tx),
+    );
+    if (updated == true) await _load();
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = ref.watch(authProvider).value;
@@ -140,11 +154,13 @@ class _HomeTabState extends ConsumerState<HomeTab> {
                   // ── AppBar ────────────────────────────────────────────────
                   SliverAppBar(
                     floating: true,
-                    backgroundColor: Theme.of(context).colorScheme.surfaceContainerLowest,
+                    backgroundColor:
+                        Theme.of(context).colorScheme.surfaceContainerLowest,
                     surfaceTintColor: Colors.transparent,
                     title: Text(
                       '嗨，${user?.displayName ?? ''}',
-                      style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+                      style: const TextStyle(
+                          fontSize: 17, fontWeight: FontWeight.w700),
                     ),
                     actions: const [
                       _BankNotifyBell(),
@@ -201,42 +217,49 @@ class _HomeTabState extends ConsumerState<HomeTab> {
 
                         const SizedBox(height: 24),
 
-                        // ── 圓圈 + PageView ────────────────────────────────
-                        SizedBox(
-                          height: 220,
-                          child: pages.isEmpty
-                              ? _RingChart(
-                                  net: 0,
-                                  label: '月結餘',
-                                  color: Theme.of(context).colorScheme.primary,
-                                )
-                              : PageView.builder(
-                                  controller: _pageController,
-                                  itemCount: pages.length,
-                                  onPageChanged: (i) => setState(() => _page = i),
-                                  itemBuilder: (_, i) {
-                                    final type = pages[i];
-                                    final cards = _cardsOf(type);
-                                    final hasUnpaidCod = _hasUnpaidCod(type);
-                                    final hasLoan = type == null && _hasOutstandingLoan;
-                                    final hasWarning = hasUnpaidCod || hasLoan;
-                                    final color = hasWarning
-                                        ? const Color(0xFFF59E0B)
-                                        : _typeColor(type, cards, context);
-                                    final showBalance =
-                                        type == 'debit' || type == 'easycard';
-                                    final value = showBalance
-                                        ? _balance(type)
-                                        : _income(type) - _expense(type);
-                                    return _RingChart(
-                                      net: value,
-                                      label: showBalance ? '剩餘金額' : '月結餘',
-                                      color: color,
-                                      hasUnpaidCod: hasUnpaidCod,
-                                      hasOutstandingLoan: hasLoan,
-                                    );
-                                  },
-                                ),
+                        // ── 圓圈 + PageView（點下去看所有紀錄）──────────────
+                        GestureDetector(
+                          onTap: () => context.push('/wallet'),
+                          child: SizedBox(
+                            height: 220,
+                            child: pages.isEmpty
+                                ? _RingChart(
+                                    net: 0,
+                                    label: '月結餘',
+                                    color:
+                                        Theme.of(context).colorScheme.primary,
+                                  )
+                                : PageView.builder(
+                                    controller: _pageController,
+                                    itemCount: pages.length,
+                                    onPageChanged: (i) =>
+                                        setState(() => _page = i),
+                                    itemBuilder: (_, i) {
+                                      final type = pages[i];
+                                      final cards = _cardsOf(type);
+                                      final hasUnpaidCod = _hasUnpaidCod(type);
+                                      final hasLoan =
+                                          type == null && _hasOutstandingLoan;
+                                      final hasWarning =
+                                          hasUnpaidCod || hasLoan;
+                                      final color = hasWarning
+                                          ? const Color(0xFFF59E0B)
+                                          : _typeColor(type, cards, context);
+                                      final showBalance =
+                                          type == 'debit' || type == 'easycard';
+                                      final value = showBalance
+                                          ? _balance(type)
+                                          : _income(type) - _expense(type);
+                                      return _RingChart(
+                                        net: value,
+                                        label: showBalance ? '剩餘金額' : '月結餘',
+                                        color: color,
+                                        hasUnpaidCod: hasUnpaidCod,
+                                        hasOutstandingLoan: hasLoan,
+                                      );
+                                    },
+                                  ),
+                          ),
                         ),
 
                         const SizedBox(height: 12),
@@ -258,14 +281,17 @@ class _HomeTabState extends ConsumerState<HomeTab> {
                               pages.length,
                               (i) => AnimatedContainer(
                                 duration: const Duration(milliseconds: 200),
-                                margin: const EdgeInsets.symmetric(horizontal: 3),
+                                margin:
+                                    const EdgeInsets.symmetric(horizontal: 3),
                                 width: i == _page ? 16 : 6,
                                 height: 6,
                                 decoration: BoxDecoration(
                                   borderRadius: BorderRadius.circular(3),
                                   color: i == _page
                                       ? Theme.of(context).colorScheme.primary
-                                      : Theme.of(context).colorScheme.outlineVariant,
+                                      : Theme.of(context)
+                                          .colorScheme
+                                          .outlineVariant,
                                 ),
                               ),
                             ),
@@ -310,28 +336,36 @@ class _HomeTabState extends ConsumerState<HomeTab> {
                                 key: ValueKey(t.id),
                                 direction: DismissDirection.endToStart,
                                 background: Container(
-                                  margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 3),
+                                  margin: const EdgeInsets.symmetric(
+                                      horizontal: 16, vertical: 3),
                                   padding: const EdgeInsets.only(right: 16),
                                   alignment: Alignment.centerRight,
                                   decoration: BoxDecoration(
-                                    color: Theme.of(context).colorScheme.errorContainer,
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .errorContainer,
                                     borderRadius: BorderRadius.circular(14),
                                   ),
                                   child: Icon(Icons.delete_rounded,
-                                      color: Theme.of(context).colorScheme.onErrorContainer),
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onErrorContainer),
                                 ),
                                 confirmDismiss: (_) async {
                                   return await showDialog<bool>(
                                     context: context,
                                     builder: (d) => AlertDialog(
                                       title: const Text('刪除紀錄'),
-                                      content: Text('確定刪除「${t.description}」？餘額將還原。'),
+                                      content:
+                                          Text('確定刪除「${t.description}」？餘額將還原。'),
                                       actions: [
                                         TextButton(
-                                            onPressed: () => Navigator.pop(d, false),
+                                            onPressed: () =>
+                                                Navigator.pop(d, false),
                                             child: const Text('取消')),
                                         FilledButton(
-                                          onPressed: () => Navigator.pop(d, true),
+                                          onPressed: () =>
+                                              Navigator.pop(d, true),
                                           child: const Text('刪除'),
                                         ),
                                       ],
@@ -339,10 +373,15 @@ class _HomeTabState extends ConsumerState<HomeTab> {
                                   );
                                 },
                                 onDismissed: (_) => _deleteTransaction(t),
-                                child: _TransactionTile(
-                                  tx: t,
-                                  cards: _cards,
-                                  onMarkPaid: t.isCodUnpaid ? () => _markCodPaid(t) : null,
+                                child: GestureDetector(
+                                  onTap: () => _openEditTransaction(t),
+                                  child: _TransactionTile(
+                                    tx: t,
+                                    cards: _cards,
+                                    onMarkPaid: t.isCodUnpaid
+                                        ? () => _markCodPaid(t)
+                                        : null,
+                                  ),
                                 ),
                               )),
 
@@ -515,7 +554,8 @@ class _TopStat extends StatelessWidget {
           children: [
             Text(label,
                 style: TextStyle(
-                    fontSize: 12, color: Theme.of(context).colorScheme.outline)),
+                    fontSize: 12,
+                    color: Theme.of(context).colorScheme.outline)),
             const SizedBox(width: 4),
             Icon(Icons.chevron_right_rounded,
                 size: 14, color: Theme.of(context).colorScheme.outline),
@@ -534,7 +574,8 @@ class _TopStat extends StatelessWidget {
 // ── Transaction tile ──────────────────────────────────────────────────────────
 
 class _TransactionTile extends StatelessWidget {
-  const _TransactionTile({required this.tx, required this.cards, this.onMarkPaid});
+  const _TransactionTile(
+      {required this.tx, required this.cards, this.onMarkPaid});
   final Transaction tx;
   final List<AppCard> cards;
   final VoidCallback? onMarkPaid;
@@ -549,7 +590,8 @@ class _TransactionTile extends StatelessWidget {
     final loanColor = isLoan ? personColor(tx.loanPerson!) : null;
     final color = unpaidCod
         ? codColor
-        : (loanColor ?? (isExpense ? const Color(0xFFEF4444) : const Color(0xFF10B981)));
+        : (loanColor ??
+            (isExpense ? const Color(0xFFEF4444) : const Color(0xFF10B981)));
 
     final matchList = tx.cardId != null
         ? cards.where((c) => c.id == tx.cardId).toList()
@@ -569,7 +611,9 @@ class _TransactionTile extends StatelessWidget {
         decoration: BoxDecoration(
           color: Theme.of(context).colorScheme.surfaceContainer,
           borderRadius: BorderRadius.circular(14),
-          border: unpaidCod ? Border.all(color: codColor.withValues(alpha: 0.5)) : null,
+          border: unpaidCod
+              ? Border.all(color: codColor.withValues(alpha: 0.5))
+              : null,
         ),
         child: Row(
           children: [
@@ -623,10 +667,12 @@ class _TransactionTile extends StatelessWidget {
                                 : '$cardEmoji ${card?.name ?? '現金'}'),
                         style: TextStyle(
                             fontSize: 11,
-                            fontWeight: (unpaidCod || isLoan) ? FontWeight.w600 : null,
+                            fontWeight:
+                                (unpaidCod || isLoan) ? FontWeight.w600 : null,
                             color: unpaidCod
                                 ? codColor
-                                : (loanColor ?? Theme.of(context).colorScheme.outline)),
+                                : (loanColor ??
+                                    Theme.of(context).colorScheme.outline)),
                       ),
                     ],
                   ),
@@ -643,14 +689,17 @@ class _TransactionTile extends StatelessWidget {
               GestureDetector(
                 onTap: onMarkPaid,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
                   decoration: BoxDecoration(
                     color: codColor,
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: const Text('標記已付',
                       style: TextStyle(
-                          fontSize: 11, color: Colors.white, fontWeight: FontWeight.w600)),
+                          fontSize: 11,
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600)),
                 ),
               ),
             ],

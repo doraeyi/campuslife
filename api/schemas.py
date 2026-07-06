@@ -262,6 +262,13 @@ class TransactionCardAssign(BaseModel):
     card_id: int | None = None
 
 
+class TransactionUpdate(BaseModel):
+    amount: float | None = None
+    description: str | None = None
+    category: str | None = None
+    note: str | None = None
+
+
 class TransactionRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

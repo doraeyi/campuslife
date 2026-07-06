@@ -5,28 +5,28 @@ import '../models/card_model.dart';
 import '../services/api_client.dart';
 
 // ── Categories ────────────────────────────────────────────────────────────────
-typedef _Cat = ({String id, String emoji, String label});
+typedef Cat = ({String id, String emoji, String label});
 
-const _expenseCategories = <_Cat>[
-  (id: 'food',          emoji: '🍜', label: '餐飲'),
-  (id: 'transport',     emoji: '🚌', label: '交通'),
-  (id: 'medical',       emoji: '💊', label: '醫療'),
-  (id: 'shopping',      emoji: '🛍️', label: '購物'),
-  (id: 'transfer',      emoji: '💸', label: '轉帳'),
-  (id: 'daily',         emoji: '🏠', label: '日常'),
+const expenseCategories = <Cat>[
+  (id: 'food', emoji: '🍜', label: '餐飲'),
+  (id: 'transport', emoji: '🚌', label: '交通'),
+  (id: 'medical', emoji: '💊', label: '醫療'),
+  (id: 'shopping', emoji: '🛍️', label: '購物'),
+  (id: 'transfer', emoji: '💸', label: '轉帳'),
+  (id: 'daily', emoji: '🏠', label: '日常'),
   (id: 'entertainment', emoji: '🎮', label: '娛樂'),
-  (id: 'education',     emoji: '📚', label: '教育'),
-  (id: 'loan',          emoji: '🤝', label: '借錢'),
-  (id: 'other',         emoji: '📦', label: '其他'),
+  (id: 'education', emoji: '📚', label: '教育'),
+  (id: 'loan', emoji: '🤝', label: '借錢'),
+  (id: 'other', emoji: '📦', label: '其他'),
 ];
 
-const _incomeCategories = <_Cat>[
-  (id: 'salary',    emoji: '💰', label: '薪資'),
-  (id: 'bonus',     emoji: '🎁', label: '獎金'),
-  (id: 'transfer',  emoji: '💸', label: '轉帳'),
-  (id: 'invest',    emoji: '📈', label: '投資'),
-  (id: 'loan',      emoji: '🤝', label: '還錢'),
-  (id: 'other',     emoji: '📦', label: '其他'),
+const incomeCategories = <Cat>[
+  (id: 'salary', emoji: '💰', label: '薪資'),
+  (id: 'bonus', emoji: '🎁', label: '獎金'),
+  (id: 'transfer', emoji: '💸', label: '轉帳'),
+  (id: 'invest', emoji: '📈', label: '投資'),
+  (id: 'loan', emoji: '🤝', label: '還錢'),
+  (id: 'other', emoji: '📦', label: '其他'),
 ];
 
 // ── Payment option ────────────────────────────────────────────────────────────
@@ -37,20 +37,21 @@ List<_Pay> _buildPayOptions(List<AppCard> cards) => [
       ...cards.map((c) => (
             cardId: c.id,
             emoji: _cardEmoji(c.type),
-            label: '${_cardShortName(c.type)} ${c.lastFour != null ? '···· ${c.lastFour}' : c.name}',
+            label:
+                '${_cardShortName(c.type)} ${c.lastFour != null ? '···· ${c.lastFour}' : c.name}',
           )),
     ];
 
 String _cardEmoji(String type) => switch (type) {
-      'credit'   => '💳',
+      'credit' => '💳',
       'easycard' => '🎫',
-      _          => '🏦',
+      _ => '🏦',
     };
 
 String _cardShortName(String type) => switch (type) {
-      'credit'   => '信用卡',
+      'credit' => '信用卡',
       'easycard' => '悠遊卡',
-      _          => '金融卡',
+      _ => '金融卡',
     };
 
 // ── Sheet ─────────────────────────────────────────────────────────────────────
@@ -89,8 +90,8 @@ class _AddTransactionSheetState extends State<AddTransactionSheet> {
   bool get _isLoan => _category == 'loan';
 
   List<_Pay> get _payOptions => _buildPayOptions(widget.cards);
-  List<_Cat> get _categories =>
-      _type == 'expense' ? _expenseCategories : _incomeCategories;
+  List<Cat> get _categories =>
+      _type == 'expense' ? expenseCategories : incomeCategories;
 
   @override
   void initState() {
@@ -146,7 +147,8 @@ class _AddTransactionSheetState extends State<AddTransactionSheet> {
   Future<void> _submit() async {
     if (_amount <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('請輸入金額'), behavior: SnackBarBehavior.floating),
+        const SnackBar(
+            content: Text('請輸入金額'), behavior: SnackBarBehavior.floating),
       );
       return;
     }
@@ -184,7 +186,8 @@ class _AddTransactionSheetState extends State<AddTransactionSheet> {
       if (mounted) {
         setState(() => _saving = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('記帳失敗，請再試一次'), behavior: SnackBarBehavior.floating),
+          const SnackBar(
+              content: Text('記帳失敗，請再試一次'), behavior: SnackBarBehavior.floating),
         );
       }
     }
@@ -203,7 +206,8 @@ class _AddTransactionSheetState extends State<AddTransactionSheet> {
   @override
   Widget build(BuildContext context) {
     final isExpense = _type == 'expense';
-    final accentColor = isExpense ? const Color(0xFFFF4D6D) : const Color(0xFF10B981);
+    final accentColor =
+        isExpense ? const Color(0xFFFF4D6D) : const Color(0xFF10B981);
 
     return Container(
       decoration: BoxDecoration(
@@ -257,7 +261,7 @@ class _AddTransactionSheetState extends State<AddTransactionSheet> {
           // ── Category grid ─────────────────────────────────────────────
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
-            child: _CategoryGrid(
+            child: CategoryGrid(
               categories: _categories,
               selected: _category,
               onTap: (id) => setState(() {
@@ -310,9 +314,11 @@ class _AddTransactionSheetState extends State<AddTransactionSheet> {
                 GestureDetector(
                   onTap: _pickDate,
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                     decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                      color:
+                          Theme.of(context).colorScheme.surfaceContainerHighest,
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Row(
@@ -337,9 +343,12 @@ class _AddTransactionSheetState extends State<AddTransactionSheet> {
                       decoration: InputDecoration(
                         hintText: '借給誰',
                         hintStyle: const TextStyle(fontSize: 13),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 6),
                         filled: true,
-                        fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                        fillColor: Theme.of(context)
+                            .colorScheme
+                            .surfaceContainerHighest,
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(8),
                           borderSide: BorderSide.none,
@@ -348,20 +357,26 @@ class _AddTransactionSheetState extends State<AddTransactionSheet> {
                     ),
                   ),
                   const SizedBox(width: 8),
-                ] else if (_isLoan && !isExpense && widget.outstandingLoans.isNotEmpty) ...[
+                ] else if (_isLoan &&
+                    !isExpense &&
+                    widget.outstandingLoans.isNotEmpty) ...[
                   Expanded(
                     child: DropdownButtonFormField<String>(
                       initialValue: _repayPerson,
                       isDense: true,
                       isExpanded: true,
                       style: TextStyle(
-                          fontSize: 13, color: Theme.of(context).colorScheme.onSurface),
+                          fontSize: 13,
+                          color: Theme.of(context).colorScheme.onSurface),
                       decoration: InputDecoration(
                         hintText: '誰還錢',
                         hintStyle: const TextStyle(fontSize: 13),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 6),
                         filled: true,
-                        fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                        fillColor: Theme.of(context)
+                            .colorScheme
+                            .surfaceContainerHighest,
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(8),
                           borderSide: BorderSide.none,
@@ -389,9 +404,11 @@ class _AddTransactionSheetState extends State<AddTransactionSheet> {
                     decoration: InputDecoration(
                       hintText: '新增備註',
                       hintStyle: const TextStyle(fontSize: 13),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 6),
                       filled: true,
-                      fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                      fillColor:
+                          Theme.of(context).colorScheme.surfaceContainerHighest,
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
                         borderSide: BorderSide.none,
@@ -418,11 +435,14 @@ class _AddTransactionSheetState extends State<AddTransactionSheet> {
                   onTap: () => setState(() => _selectedCardId = opt.cardId),
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 180),
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                     decoration: BoxDecoration(
                       color: selected
                           ? const Color(0xFF1E3A5F)
-                          : Theme.of(context).colorScheme.surfaceContainerHighest,
+                          : Theme.of(context)
+                              .colorScheme
+                              .surfaceContainerHighest,
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Row(
@@ -565,13 +585,14 @@ class _Pill extends StatelessWidget {
 }
 
 // ── Category grid ─────────────────────────────────────────────────────────────
-class _CategoryGrid extends StatelessWidget {
-  const _CategoryGrid({
+class CategoryGrid extends StatelessWidget {
+  const CategoryGrid({
+    super.key,
     required this.categories,
     required this.selected,
     required this.onTap,
   });
-  final List<_Cat> categories;
+  final List<Cat> categories;
   final String? selected;
   final ValueChanged<String> onTap;
 
@@ -641,10 +662,18 @@ class _Numpad extends StatelessWidget {
   final Color accentColor;
 
   static const _keys = [
-    '1', '2', '3',
-    '4', '5', '6',
-    '7', '8', '9',
-    '.', '0', '00',
+    '1',
+    '2',
+    '3',
+    '4',
+    '5',
+    '6',
+    '7',
+    '8',
+    '9',
+    '.',
+    '0',
+    '00',
   ];
 
   @override
@@ -662,7 +691,9 @@ class _Numpad extends StatelessWidget {
               childAspectRatio: 2.2,
               mainAxisSpacing: 2,
               crossAxisSpacing: 2,
-              children: _keys.map((k) => _NumKey(label: k, onTap: () => onKey(k))).toList(),
+              children: _keys
+                  .map((k) => _NumKey(label: k, onTap: () => onKey(k)))
+                  .toList(),
             ),
           ),
           // Right column: backspace + save
@@ -681,7 +712,9 @@ class _Numpad extends StatelessWidget {
                   child: Container(
                     height: 76,
                     decoration: BoxDecoration(
-                      color: onSave != null ? const Color(0xFFFBBF24) : Colors.grey.shade300,
+                      color: onSave != null
+                          ? const Color(0xFFFBBF24)
+                          : Colors.grey.shade300,
                       borderRadius: BorderRadius.circular(10),
                     ),
                     alignment: Alignment.center,

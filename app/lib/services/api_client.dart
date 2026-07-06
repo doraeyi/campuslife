@@ -432,6 +432,28 @@ class ApiClient {
     return Transaction.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
   }
 
+  Future<Transaction> updateTransaction(
+    int transactionId, {
+    double? amount,
+    String? description,
+    String? category,
+    String? note,
+  }) async {
+    final body = <String, dynamic>{};
+    if (amount != null) body['amount'] = amount;
+    if (description != null) body['description'] = description;
+    if (category != null) body['category'] = category;
+    if (note != null) body['note'] = note;
+
+    final response = await http.patch(
+      Uri.parse('$baseUrl/transactions/$transactionId'),
+      headers: await _authHeaders(),
+      body: jsonEncode(body),
+    );
+    if (response.statusCode != 200) throw Exception('更新交易失敗');
+    return Transaction.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+  }
+
   Future<void> deleteTransaction(int transactionId) async {
     final response = await http.delete(
       Uri.parse('$baseUrl/transactions/$transactionId'),

@@ -127,6 +127,47 @@ def assign_card(
     return {"status": "ok"}
 
 
+@router.patch("/{tx_id}", response_model=schemas.TransactionRead)
+def update_transaction(
+    tx_id: int,
+    payload: schemas.TransactionUpdate,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    tx = (
+        db.query(models.Transaction)
+        .filter(models.Transaction.id == tx_id, models.Transaction.user_id == current_user.id)
+        .first()
+    )
+    if tx is None:
+        raise HTTPException(status_code=404, detail="找不到這筆交易")
+
+    # 貨到付款且尚未付款的交易本來就不計入餘額，改金額也不用動卡片餘額
+    counts_toward_balance = not tx.is_cod or tx.cod_paid
+    card = (
+        db.query(models.Card).filter(models.Card.id == tx.card_id).first()
+        if tx.card_id is not None
+        else None
+    )
+
+    if payload.amount is not None:
+        new_amount = -abs(payload.amount) if tx.transaction_type == "expense" else abs(payload.amount)
+        if card is not None and card.balance is not None and counts_toward_balance:
+            card.balance += new_amount - tx.amount
+        tx.amount = new_amount
+
+    if payload.description is not None:
+        tx.description = payload.description
+    if payload.category is not None:
+        tx.category = payload.category
+    if payload.note is not None:
+        tx.note = payload.note
+
+    db.commit()
+    db.refresh(tx)
+    return tx
+
+
 @router.delete("/{transaction_id}")
 def delete_transaction(
     transaction_id: int,

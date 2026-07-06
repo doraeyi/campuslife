@@ -7,6 +7,7 @@ import '../models/transaction.dart';
 import '../services/api_client.dart';
 import '../services/notification_service.dart';
 import 'add_transaction_sheet.dart';
+import 'edit_transaction_sheet.dart';
 
 class WalletScreen extends ConsumerStatefulWidget {
   const WalletScreen({super.key});
@@ -58,6 +59,17 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
     await _load();
   }
 
+  Future<void> _openEditTransaction(Transaction tx) async {
+    final updated = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      useRootNavigator: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => EditTransactionSheet(transaction: tx),
+    );
+    if (updated == true) await _load();
+  }
+
   Future<void> _showUpdateBalance(AppCard card) async {
     final ctrl = TextEditingController(
       text: card.balance?.toStringAsFixed(0) ?? '',
@@ -69,11 +81,14 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
         content: TextField(
           controller: ctrl,
           keyboardType: TextInputType.number,
-          decoration: const InputDecoration(prefixText: '\$  ', hintText: '輸入目前餘額'),
+          decoration:
+              const InputDecoration(prefixText: '\$  ', hintText: '輸入目前餘額'),
           autofocus: true,
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('取消')),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('確認'),
@@ -166,16 +181,20 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
                 const SizedBox(height: 10),
                 TextField(
                   controller: balanceCtrl,
-                  decoration: const InputDecoration(labelText: '目前餘額（選填）', prefixText: '\$ '),
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(
+                      labelText: '目前餘額（選填）', prefixText: '\$ '),
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
                 ),
               ],
               if (isCredit) ...[
                 const SizedBox(height: 10),
                 TextField(
                   controller: dueAmountCtrl,
-                  decoration: const InputDecoration(labelText: '目前需要繳的金額（選填）', prefixText: '\$ '),
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(
+                      labelText: '目前需要繳的金額（選填）', prefixText: '\$ '),
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
                 ),
                 const SizedBox(height: 10),
                 TextField(
@@ -252,7 +271,9 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
           bank: isEasycard
               ? null
               : (bankCtrl.text.trim().isEmpty ? null : bankCtrl.text.trim()),
-          lastFour: lastFourCtrl.text.trim().isEmpty ? null : lastFourCtrl.text.trim(),
+          lastFour: lastFourCtrl.text.trim().isEmpty
+              ? null
+              : lastFourCtrl.text.trim(),
           balance: isCredit ? null : double.tryParse(balanceCtrl.text),
           dueAmount: isCredit ? double.tryParse(dueAmountCtrl.text) : null,
           paymentDueDate: isCredit && dueDayCtrl.text.trim().isNotEmpty
@@ -328,6 +349,7 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
                       transactions: _transactions,
                       onDelete: _deleteTransaction,
                       onMarkPaid: _markCodPaid,
+                      onTap: _openEditTransaction,
                     ),
                 ],
               ),
@@ -485,10 +507,12 @@ class _CardTile extends StatelessWidget {
             Text(
               card.type == 'credit'
                   ? (card.dueAmount != null
-                      ? NumberFormat.currency(symbol: '\$', decimalDigits: 0).format(card.dueAmount)
+                      ? NumberFormat.currency(symbol: '\$', decimalDigits: 0)
+                          .format(card.dueAmount)
                       : '未設定應繳金額')
                   : (card.balance != null
-                      ? NumberFormat.currency(symbol: '\$', decimalDigits: 0).format(card.balance)
+                      ? NumberFormat.currency(symbol: '\$', decimalDigits: 0)
+                          .format(card.balance)
                       : '未設定餘額'),
               style: const TextStyle(
                 color: Colors.white,
@@ -532,11 +556,13 @@ class _TransactionSliver extends StatelessWidget {
     required this.transactions,
     required this.onDelete,
     required this.onMarkPaid,
+    required this.onTap,
   });
 
   final List<Transaction> transactions;
   final ValueChanged<Transaction> onDelete;
   final ValueChanged<Transaction> onMarkPaid;
+  final ValueChanged<Transaction> onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -588,7 +614,9 @@ class _TransactionSliver extends StatelessWidget {
                         title: const Text('刪除交易'),
                         content: Text('確定刪除「${tx.description}」？餘額將還原。'),
                         actions: [
-                          TextButton(onPressed: () => Navigator.pop(d, false), child: const Text('取消')),
+                          TextButton(
+                              onPressed: () => Navigator.pop(d, false),
+                              child: const Text('取消')),
                           FilledButton(
                             onPressed: () => Navigator.pop(d, true),
                             child: const Text('刪除'),
@@ -598,9 +626,12 @@ class _TransactionSliver extends StatelessWidget {
                     );
                   },
                   onDismissed: (_) => onDelete(tx),
-                  child: _TransactionTile(
-                    tx: tx,
-                    onMarkPaid: tx.isCodUnpaid ? () => onMarkPaid(tx) : null,
+                  child: GestureDetector(
+                    onTap: () => onTap(tx),
+                    child: _TransactionTile(
+                      tx: tx,
+                      onMarkPaid: tx.isCodUnpaid ? () => onMarkPaid(tx) : null,
+                    ),
                   ),
                 ),
               ),
@@ -642,7 +673,9 @@ class _TransactionTile extends StatelessWidget {
               ? Icons.local_shipping_outlined
               : (isLoan
                   ? Icons.handshake_outlined
-                  : (isExpense ? Icons.arrow_upward_rounded : Icons.arrow_downward_rounded)),
+                  : (isExpense
+                      ? Icons.arrow_upward_rounded
+                      : Icons.arrow_downward_rounded)),
           size: 18,
           color: unpaidCod
               ? codColor
@@ -652,7 +685,8 @@ class _TransactionTile extends StatelessWidget {
                       : const Color(0xFF059669))),
         ),
       ),
-      title: Text(tx.description, style: const TextStyle(fontWeight: FontWeight.w500)),
+      title: Text(tx.description,
+          style: const TextStyle(fontWeight: FontWeight.w500)),
       subtitle: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -661,11 +695,14 @@ class _TransactionTile extends StatelessWidget {
               width: 8,
               height: 8,
               margin: const EdgeInsets.only(right: 4),
-              decoration: BoxDecoration(color: loanColor, shape: BoxShape.circle),
+              decoration:
+                  BoxDecoration(color: loanColor, shape: BoxShape.circle),
             ),
           ],
           Text(
-            unpaidCod ? '⚠ 貨到付款未付' : (isLoan ? tx.loanPerson! : (tx.card?.name ?? '')),
+            unpaidCod
+                ? '⚠ 貨到付款未付'
+                : (isLoan ? tx.loanPerson! : (tx.card?.name ?? '')),
             style: TextStyle(
               fontSize: 12,
               fontWeight: (unpaidCod || isLoan) ? FontWeight.w600 : null,
@@ -702,7 +739,9 @@ class _TransactionTile extends StatelessWidget {
                 ),
                 child: const Text('標記已付',
                     style: TextStyle(
-                        fontSize: 11, color: Colors.white, fontWeight: FontWeight.w600)),
+                        fontSize: 11,
+                        color: Colors.white,
+                        fontWeight: FontWeight.w600)),
               ),
             ),
           ],
@@ -785,9 +824,18 @@ class _ColorSwatches extends StatelessWidget {
   final ValueChanged<String> onChanged;
 
   static const _colors = [
-    '#3B82F6', '#6366F1', '#8B5CF6', '#EC4899',
-    '#EF4444', '#F59E0B', '#10B981', '#6B7280',
-    '#0EA5E9', '#14B8A6', '#F97316', '#84CC16',
+    '#3B82F6',
+    '#6366F1',
+    '#8B5CF6',
+    '#EC4899',
+    '#EF4444',
+    '#F59E0B',
+    '#10B981',
+    '#6B7280',
+    '#0EA5E9',
+    '#14B8A6',
+    '#F97316',
+    '#84CC16',
   ];
 
   @override
@@ -807,11 +855,13 @@ class _ColorSwatches extends StatelessWidget {
             decoration: BoxDecoration(
               color: color,
               shape: BoxShape.circle,
-              border: isSelected
-                  ? Border.all(color: Colors.white, width: 3)
-                  : null,
+              border:
+                  isSelected ? Border.all(color: Colors.white, width: 3) : null,
               boxShadow: isSelected
-                  ? [BoxShadow(color: color.withValues(alpha: 0.6), blurRadius: 8)]
+                  ? [
+                      BoxShadow(
+                          color: color.withValues(alpha: 0.6), blurRadius: 8)
+                    ]
                   : null,
             ),
             child: isSelected
