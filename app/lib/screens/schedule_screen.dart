@@ -14,10 +14,10 @@ import 'schedule_widgets.dart';
 import '../services/notification_service.dart';
 
 // ── Design tokens ──────────────────────────────────────────────────────────
-const _kWorkBlue   = Color(0xFF3B82F6);
+const _kWorkBlue = Color(0xFF3B82F6);
 const _kHolidayRed = Color(0xFFEF4444);
 const _kTodayAmber = Color(0xFFF59E0B);
-const _kNetGreen   = Color(0xFF10B981);
+const _kNetGreen = Color(0xFF10B981);
 
 DateTime _dateOnly(DateTime d) => DateTime(d.year, d.month, d.day);
 
@@ -242,11 +242,13 @@ class ScheduleScreenState extends State<ScheduleScreen> {
                           padding: const EdgeInsets.fromLTRB(20, 10, 20, 4),
                           child: Row(
                             children: [
-                              const _LegendDot(color: _kTodayAmber, label: '今天'),
+                              const _LegendDot(
+                                  color: _kTodayAmber, label: '今天'),
                               const SizedBox(width: 12),
                               const _LegendDot(color: _kWorkBlue, label: '上班'),
                               const SizedBox(width: 12),
-                              const _LegendDot(color: _kHolidayRed, label: '假日'),
+                              const _LegendDot(
+                                  color: _kHolidayRed, label: '假日'),
                               const Spacer(),
                               if (!_multiSelectMode)
                                 Text(
@@ -396,9 +398,8 @@ class _MonthHeader extends StatelessWidget {
                           : Colors.transparent,
                       borderRadius: BorderRadius.circular(20),
                       border: Border.all(
-                        color: selected
-                            ? job.color
-                            : colorScheme.outlineVariant,
+                        color:
+                            selected ? job.color : colorScheme.outlineVariant,
                         width: selected ? 1.5 : 1,
                       ),
                     ),
@@ -418,12 +419,9 @@ class _MonthHeader extends StatelessWidget {
                           job.name,
                           style: TextStyle(
                             fontSize: 13,
-                            fontWeight: selected
-                                ? FontWeight.w600
-                                : FontWeight.w400,
-                            color: selected
-                                ? job.color
-                                : colorScheme.onSurface,
+                            fontWeight:
+                                selected ? FontWeight.w600 : FontWeight.w400,
+                            color: selected ? job.color : colorScheme.onSurface,
                           ),
                         ),
                       ],
@@ -504,14 +502,23 @@ class _CalendarCard extends StatelessWidget {
           ),
           calendarBuilders: CalendarBuilders(
             dowBuilder: (context, day) => _DowCell(day: day),
-            defaultBuilder: (context, day, _) =>
-                _DayCell(day: day, shiftsFor: shiftsFor, colorScheme: colorScheme),
-            outsideBuilder: (context, day, _) =>
-                _DayCell(day: day, shiftsFor: shiftsFor, colorScheme: colorScheme, isOutside: true),
-            todayBuilder: (context, day, _) =>
-                _DayCell(day: day, shiftsFor: shiftsFor, colorScheme: colorScheme, isToday: true),
-            selectedBuilder: (context, day, _) =>
-                _DayCell(day: day, shiftsFor: shiftsFor, colorScheme: colorScheme, isSelected: true),
+            defaultBuilder: (context, day, _) => _DayCell(
+                day: day, shiftsFor: shiftsFor, colorScheme: colorScheme),
+            outsideBuilder: (context, day, _) => _DayCell(
+                day: day,
+                shiftsFor: shiftsFor,
+                colorScheme: colorScheme,
+                isOutside: true),
+            todayBuilder: (context, day, _) => _DayCell(
+                day: day,
+                shiftsFor: shiftsFor,
+                colorScheme: colorScheme,
+                isToday: true),
+            selectedBuilder: (context, day, _) => _DayCell(
+                day: day,
+                shiftsFor: shiftsFor,
+                colorScheme: colorScheme,
+                isSelected: true),
             markerBuilder: (_, __, ___) => const SizedBox.shrink(),
           ),
         ),
@@ -596,9 +603,11 @@ class _DayCell extends StatelessWidget {
     // Circle background for today / selected
     BoxDecoration? circleDeco;
     if (isToday) {
-      circleDeco = const BoxDecoration(color: _kTodayAmber, shape: BoxShape.circle);
+      circleDeco =
+          const BoxDecoration(color: _kTodayAmber, shape: BoxShape.circle);
     } else if (isSelected) {
-      circleDeco = BoxDecoration(color: colorScheme.primary, shape: BoxShape.circle);
+      circleDeco =
+          BoxDecoration(color: colorScheme.primary, shape: BoxShape.circle);
     }
 
     final shifts = isOutside ? <Shift>[] : shiftsFor(day);
@@ -627,8 +636,9 @@ class _DayCell extends StatelessWidget {
                 '${day.day}',
                 style: TextStyle(
                   fontSize: 14,
-                  fontWeight:
-                      (isToday || isSelected) ? FontWeight.bold : FontWeight.w500,
+                  fontWeight: (isToday || isSelected)
+                      ? FontWeight.bold
+                      : FontWeight.w500,
                   color: numColor,
                 ),
               ),
@@ -648,9 +658,7 @@ class _DayCell extends StatelessWidget {
                     borderRadius: BorderRadius.circular(4),
                   ),
                   child: Text(
-                    shifts.length > 1
-                        ? '$label+${shifts.length - 1}'
-                        : label!,
+                    shifts.length > 1 ? '$label+${shifts.length - 1}' : label!,
                     style: const TextStyle(
                       fontSize: 9,
                       color: Colors.white,
@@ -779,6 +787,41 @@ class _SalaryCard extends StatefulWidget {
 class _SalaryCardState extends State<_SalaryCard> {
   bool _isSaving = false;
   bool _isOpeningSheet = false;
+  bool _alreadyRecorded = false;
+
+  String get _monthKey =>
+      '${widget.month.year}-${widget.month.month.toString().padLeft(2, '0')}';
+
+  @override
+  void initState() {
+    super.initState();
+    _checkAlreadyRecorded();
+  }
+
+  @override
+  void didUpdateWidget(_SalaryCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.selectedJob.id != widget.selectedJob.id ||
+        oldWidget.month.year != widget.month.year ||
+        oldWidget.month.month != widget.month.month) {
+      _checkAlreadyRecorded();
+    }
+  }
+
+  // 這個工作這個月是不是已經記過收入了——本月已記錄就不讓使用者重複按，
+  // 避免同一筆薪資被記成兩筆收入紀錄
+  Future<void> _checkAlreadyRecorded() async {
+    try {
+      final incomes = await widget.apiClient.fetchIncomes();
+      final monthKey = _monthKey;
+      final found = incomes.any(
+        (i) => i.jobId == widget.selectedJob.id && i.month == monthKey,
+      );
+      if (mounted) setState(() => _alreadyRecorded = found);
+    } catch (_) {
+      // 查不到就當作沒記錄過，不要因為網路問題卡住使用者
+    }
+  }
 
   Future<void> _openSalarySheet(SalaryBreakdown breakdown) async {
     setState(() => _isOpeningSheet = true);
@@ -812,12 +855,12 @@ class _SalaryCardState extends State<_SalaryCard> {
     try {
       await widget.apiClient.createIncome(
         jobId: widget.selectedJob.id,
-        month:
-            '${widget.month.year}-${widget.month.month.toString().padLeft(2, '0')}',
+        month: _monthKey,
         grossAmount: breakdown.gross,
         deductionAmount: breakdown.insuranceDeduction,
       );
       if (mounted) {
+        setState(() => _alreadyRecorded = true);
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('已新增到收入紀錄')),
         );
@@ -944,12 +987,30 @@ class _SalaryCardState extends State<_SalaryCard> {
 
             const SizedBox(height: 20),
 
+            // ── 本月已入帳的話就不讓使用者重複按，避免記成兩筆 ──
+            if (_alreadyRecorded) ...[
+              const Row(
+                children: [
+                  Icon(Icons.check_circle_rounded, size: 16, color: _kNetGreen),
+                  SizedBox(width: 6),
+                  Text('本月薪資已入帳',
+                      style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: _kNetGreen)),
+                ],
+              ),
+              const SizedBox(height: 8),
+            ],
+
             // ── CTAs ──
             Row(
               children: [
                 Expanded(
                   child: OutlinedButton(
-                    onPressed: _isSaving ? null : () => _addToIncome(breakdown),
+                    onPressed: (_isSaving || _alreadyRecorded)
+                        ? null
+                        : () => _addToIncome(breakdown),
                     style: OutlinedButton.styleFrom(
                       minimumSize: const Size.fromHeight(48),
                       shape: RoundedRectangleBorder(
@@ -968,8 +1029,9 @@ class _SalaryCardState extends State<_SalaryCard> {
                 const SizedBox(width: 10),
                 Expanded(
                   child: FilledButton(
-                    onPressed:
-                        _isOpeningSheet ? null : () => _openSalarySheet(breakdown),
+                    onPressed: (_isOpeningSheet || _alreadyRecorded)
+                        ? null
+                        : () => _openSalarySheet(breakdown),
                     style: FilledButton.styleFrom(
                       minimumSize: const Size.fromHeight(48),
                       backgroundColor: _kNetGreen,
@@ -1051,8 +1113,8 @@ class _ErrorState extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.error_outline, size: 48,
-              color: Theme.of(context).colorScheme.error),
+          Icon(Icons.error_outline,
+              size: 48, color: Theme.of(context).colorScheme.error),
           const SizedBox(height: 12),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 24),
