@@ -856,6 +856,18 @@ class _SalaryCardState extends State<_SalaryCard> {
         ),
       );
       if (result == true) {
+        try {
+          // 「記帳入帳」記的是真實交易，這裡順便補一筆對帳用的 Income，
+          // 這樣「對帳」頁籤也看得到，不用使用者再手動按一次「記收入紀錄」
+          await widget.apiClient.createIncome(
+            jobId: widget.selectedJob.id,
+            month: _monthKey,
+            grossAmount: breakdown.gross,
+            deductionAmount: breakdown.insuranceDeduction,
+          );
+        } catch (_) {
+          // 交易本身已經記成功了，對帳紀錄補寫失敗不影響主要流程
+        }
         await _checkAlreadyRecorded();
       }
     } catch (e) {
