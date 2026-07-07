@@ -111,6 +111,7 @@ class Transaction(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     card_id = Column(Integer, ForeignKey("cards.id"), nullable=True, index=True)
+    job_id = Column(Integer, ForeignKey("jobs.id"), nullable=True, index=True)
     amount = Column(Float, nullable=False)  # 正數=收入, 負數=支出
     description = Column(String(100), nullable=False)
     transaction_type = Column(String(20), nullable=False)  # "expense" | "income"
@@ -126,6 +127,7 @@ class Transaction(Base):
     created_at = Column(DateTime, server_default=func.now())
 
     card = relationship("Card")
+    job = relationship("Job")
 
     __table_args__ = (UniqueConstraint("user_id", "einvoice_number", name="uq_transaction_user_einvoice"),)
 

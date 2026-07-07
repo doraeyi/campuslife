@@ -224,6 +224,7 @@ class CardRead(CardBase):
 
 class TransactionCreate(BaseModel):
     card_id: int | None = None
+    job_id: int | None = None
     amount: float
     description: str | None = None
     transaction_type: str | None = None
@@ -274,6 +275,7 @@ class TransactionRead(BaseModel):
 
     id: int
     card_id: int | None
+    job_id: int | None
     amount: float
     description: str
     transaction_type: str

@@ -5,6 +5,7 @@ import 'card_model.dart';
 class Transaction {
   final int id;
   final int? cardId;
+  final int? jobId;
   final double amount; // 正數=收入, 負數=支出
   final String description;
   final String transactionType; // "expense" | "income"
@@ -20,6 +21,7 @@ class Transaction {
   const Transaction({
     required this.id,
     this.cardId,
+    this.jobId,
     required this.amount,
     required this.description,
     required this.transactionType,
@@ -39,6 +41,7 @@ class Transaction {
   factory Transaction.fromJson(Map<String, dynamic> json) => Transaction(
         id: json['id'] as int,
         cardId: json['card_id'] as int?,
+        jobId: json['job_id'] as int?,
         amount: (json['amount'] as num).toDouble(),
         description: json['description'] as String,
         transactionType: json['transaction_type'] as String,

@@ -813,16 +813,25 @@ class _SalaryCardState extends State<_SalaryCard> {
     }
   }
 
-  // 這個工作這個月是不是已經記過收入了——本月已記錄就不讓使用者重複按，
-  // 避免同一筆薪資被記成兩筆收入紀錄
+  // 這個工作這個月是不是已經記過收入了——「記收入紀錄」寫進 Income 表、
+  // 「記帳入帳」寫進 Transaction 表，兩邊都要查，本月只要記過一種就不讓
+  // 使用者重複按，避免同一筆薪資被記成兩筆
   Future<void> _checkAlreadyRecorded() async {
     try {
       final incomes = await widget.apiClient.fetchIncomes();
+      final transactions = await widget.apiClient.fetchTransactions();
       final monthKey = _monthKey;
-      final found = incomes.any(
+      final foundIncome = incomes.any(
         (i) => i.jobId == widget.selectedJob.id && i.month == monthKey,
       );
-      if (mounted) setState(() => _alreadyRecorded = found);
+      final foundTransaction = transactions.any((t) =>
+          t.jobId == widget.selectedJob.id &&
+          t.transactionType == 'income' &&
+          t.createdAt.year == widget.month.year &&
+          t.createdAt.month == widget.month.month);
+      if (mounted) {
+        setState(() => _alreadyRecorded = foundIncome || foundTransaction);
+      }
     } catch (_) {
       // 查不到就當作沒記錄過，不要因為網路問題卡住使用者
       if (mounted) setState(() => _alreadyRecorded = false);
@@ -834,7 +843,7 @@ class _SalaryCardState extends State<_SalaryCard> {
     try {
       final cards = await widget.apiClient.fetchCards();
       if (!mounted) return;
-      await showModalBottomSheet<void>(
+      final result = await showModalBottomSheet<bool>(
         context: context,
         isScrollControlled: true,
         useRootNavigator: true,
@@ -843,8 +852,12 @@ class _SalaryCardState extends State<_SalaryCard> {
           cards: cards,
           prefillAmount: breakdown.net,
           prefillType: 'income',
+          jobId: widget.selectedJob.id,
         ),
       );
+      if (result == true) {
+        await _checkAlreadyRecorded();
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

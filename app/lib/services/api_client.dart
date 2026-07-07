@@ -395,6 +395,7 @@ class ApiClient {
 
   Future<Transaction> createTransaction({
     int? cardId,
+    int? jobId,
     required double amount,
     required String description,
     required String transactionType,
@@ -409,6 +410,7 @@ class ApiClient {
       headers: await _authHeaders(),
       body: jsonEncode({
         'card_id': cardId,
+        'job_id': jobId,
         'amount': amount,
         'description': description,
         'transaction_type': transactionType,

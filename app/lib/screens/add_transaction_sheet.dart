@@ -62,12 +62,14 @@ class AddTransactionSheet extends StatefulWidget {
     this.prefillAmount,
     this.prefillType,
     this.outstandingLoans = const {},
+    this.jobId,
   });
 
   final List<AppCard> cards;
   final double? prefillAmount;
   final String? prefillType;
   final Map<String, double> outstandingLoans;
+  final int? jobId;
 
   @override
   State<AddTransactionSheet> createState() => _AddTransactionSheetState();
@@ -168,6 +170,7 @@ class _AddTransactionSheetState extends State<AddTransactionSheet> {
       final note = _noteCtrl.text.trim();
       await _api.createTransaction(
         cardId: _selectedCardId,
+        jobId: widget.jobId,
         amount: signedAmount,
         description: _isLoan
             ? (_type == 'expense' ? '借錢給 $_loanPerson' : '$_loanPerson 還錢')
