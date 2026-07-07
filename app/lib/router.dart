@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'features/auto_bookkeeping/auto_bookkeeping_hub_page.dart';
 import 'features/bank_notify/screenshot_import_page.dart';
 import 'features/einvoice/einvoice_import_page.dart';
+import 'features/settings/credit_account_detail_page.dart';
 import 'features/settings/profile_page.dart';
 import 'features/settings/settings_page.dart';
 import 'screens/app_scaffold.dart';
@@ -57,6 +58,12 @@ final appRouter = GoRouter(
     GoRoute(
       path: '/settings/bank-notify',
       builder: (_, __) => const ScreenshotImportPage(),
+    ),
+    GoRoute(
+      path: '/settings/credit-accounts/:accountId',
+      builder: (_, state) => CreditAccountDetailPage(
+        accountId: int.parse(state.pathParameters['accountId']!),
+      ),
     ),
 
     // ── Main shell ──────────────────────────────────────────────────────

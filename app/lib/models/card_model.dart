@@ -11,6 +11,7 @@ class AppCard {
   final String? passExpiryDate;
   final String? paymentDueDate;
   final int? reminderDay;
+  final int? creditAccountId;
 
   const AppCard({
     required this.id,
@@ -25,6 +26,7 @@ class AppCard {
     this.passExpiryDate,
     this.paymentDueDate,
     this.reminderDay,
+    this.creditAccountId,
   });
 
   factory AppCard.fromJson(Map<String, dynamic> json) => AppCard(
@@ -40,5 +42,6 @@ class AppCard {
         passExpiryDate: json['pass_expiry_date'] as String?,
         paymentDueDate: json['payment_due_date'] as String?,
         reminderDay: json['reminder_day'] as int?,
+        creditAccountId: json['credit_account_id'] as int?,
       );
 }

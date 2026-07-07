@@ -58,7 +58,6 @@ class _HomeTabState extends ConsumerState<HomeTab> with WidgetsBindingObserver {
   }
 
   Future<void> _load() async {
-    ref.invalidate(bankNotifyPendingCountProvider);
     try {
       final results = await Future.wait([
         _api.fetchCards(),
@@ -211,7 +210,10 @@ class _HomeTabState extends ConsumerState<HomeTab> with WidgetsBindingObserver {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
-              onRefresh: _load,
+              onRefresh: () {
+                ref.invalidate(bankNotifyPendingCountProvider);
+                return _load();
+              },
               child: CustomScrollView(
                 slivers: [
                   // ── AppBar ────────────────────────────────────────────────
