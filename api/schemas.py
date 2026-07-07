@@ -199,6 +199,7 @@ class CardBase(BaseModel):
     pass_expiry_date: str | None = None
     payment_due_date: str | None = None
     reminder_day: int | None = None
+    credit_account_id: int | None = None
 
     @model_validator(mode="after")
     def _validate_required_fields(self):
@@ -286,8 +287,115 @@ class TransactionRead(BaseModel):
     cod_paid: bool
     is_loan: bool
     loan_person: str | None
+    transaction_date: date | None = None
     created_at: datetime
     card: "CardRead | None" = None
+
+
+class BankBase(BaseModel):
+    name: str
+
+
+class BankCreate(BankBase):
+    pass
+
+
+class BankUpdate(BankBase):
+    pass
+
+
+class BankRead(BankBase):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+
+
+class CreditAccountBase(BaseModel):
+    bank_id: int
+    name: str
+    credit_limit: float
+    billing_day: int | None = None
+    due_day: int | None = None
+
+
+class CreditAccountCreate(CreditAccountBase):
+    pass
+
+
+class CreditAccountUpdate(CreditAccountBase):
+    pass
+
+
+class CreditAccountRead(CreditAccountBase):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    bank: BankRead | None = None
+
+
+class CreditAccountAvailable(BaseModel):
+    credit_account_id: int
+    credit_limit: float
+    outstanding_balance: float
+    available_credit: float
+
+
+class StatementBase(BaseModel):
+    credit_account_id: int
+    period_start: date
+    period_end: date
+    statement_date: date
+    due_date: date
+    statement_amount: float
+    minimum_due: float | None = None
+
+
+class StatementCreate(StatementBase):
+    pass
+
+
+class StatementUpdate(StatementBase):
+    pass
+
+
+class StatementRead(BaseModel):
+    id: int
+    credit_account_id: int
+    period_start: date
+    period_end: date
+    statement_date: date
+    due_date: date
+    statement_amount: float
+    minimum_due: float | None
+    paid_amount: float
+    status: str
+
+
+class PaymentCreate(BaseModel):
+    statement_id: int | None = None
+    from_account_id: int | None = None
+    amount: float
+    payment_date: date
+
+
+class PaymentUpdate(BaseModel):
+    statement_id: int | None = None
+    from_account_id: int | None = None
+    amount: float | None = None
+    payment_date: date | None = None
+
+
+class PaymentStatementAssign(BaseModel):
+    statement_id: int | None = None
+
+
+class PaymentRead(BaseModel):
+    id: int
+    statement_id: int | None
+    from_account_id: int | None
+    amount: float
+    payment_date: date
+    is_late: bool | None
 
 
 class CardBalanceUpdate(BaseModel):

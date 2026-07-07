@@ -9,6 +9,16 @@ from database import get_db
 router = APIRouter(prefix="/cards", tags=["cards"])
 
 
+def _validate_credit_account(db: Session, credit_account_id: int, user_id: int) -> None:
+    account = (
+        db.query(models.CreditAccount)
+        .filter(models.CreditAccount.id == credit_account_id, models.CreditAccount.user_id == user_id)
+        .first()
+    )
+    if account is None:
+        raise HTTPException(status_code=404, detail="找不到這個信用帳戶")
+
+
 @router.get("", response_model=list[schemas.CardRead])
 def list_cards(
     current_user: models.User = Depends(get_current_user),
@@ -23,6 +33,8 @@ def create_card(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    if payload.credit_account_id is not None:
+        _validate_credit_account(db, payload.credit_account_id, current_user.id)
     card = models.Card(user_id=current_user.id, **payload.model_dump())
     db.add(card)
     db.commit()
@@ -44,6 +56,8 @@ def update_card(
     )
     if card is None:
         raise HTTPException(status_code=404, detail="找不到這張卡片")
+    if payload.credit_account_id is not None:
+        _validate_credit_account(db, payload.credit_account_id, current_user.id)
     for k, v in payload.model_dump().items():
         setattr(card, k, v)
     db.commit()

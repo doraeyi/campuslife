@@ -55,6 +55,31 @@ class ShiftPreset(Base):
     end_time = Column(Time, nullable=False)
 
 
+class Bank(Base):
+    __tablename__ = "banks"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    name = Column(String(100), nullable=False)
+    created_at = Column(DateTime, server_default=func.now())
+
+
+class CreditAccount(Base):
+    """一組信用額度——可能只對應一張卡（獨立額度），也可能對應多張卡（共用額度）。"""
+    __tablename__ = "credit_accounts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    bank_id = Column(Integer, ForeignKey("banks.id"), nullable=False, index=True)
+    name = Column(String(100), nullable=False)
+    credit_limit = Column(Float, nullable=False)
+    billing_day = Column(Integer, nullable=True)  # 結帳日
+    due_day = Column(Integer, nullable=True)  # 繳款日
+    created_at = Column(DateTime, server_default=func.now())
+
+    bank = relationship("Bank")
+
+
 class Card(Base):
     __tablename__ = "cards"
 
@@ -71,7 +96,10 @@ class Card(Base):
     pass_expiry_date = Column(String(10), nullable=True)
     payment_due_date = Column(String(10), nullable=True)
     reminder_day = Column(Integer, nullable=True)
+    credit_account_id = Column(Integer, ForeignKey("credit_accounts.id"), nullable=True, index=True)
     created_at = Column(DateTime, server_default=func.now())
+
+    credit_account = relationship("CreditAccount")
 
 
 class Shift(Base):
@@ -125,12 +153,47 @@ class Transaction(Base):
     source = Column(String(20), nullable=False, default="manual")  # manual | einvoice_csv | line_bot | bank_notification
     einvoice_number = Column(String(10), nullable=True, index=True)
     einvoice_random_code = Column(String(4), nullable=True)
+    transaction_date = Column(Date, nullable=True)  # 實際消費日期，跟 created_at（寫入時間）分開
     created_at = Column(DateTime, server_default=func.now())
 
     card = relationship("Card")
     job = relationship("Job")
 
     __table_args__ = (UniqueConstraint("user_id", "einvoice_number", name="uq_transaction_user_einvoice"),)
+
+
+class Statement(Base):
+    """一期帳單——涵蓋整個 CreditAccount（額度群組）底下所有卡片的消費，不是單卡各一張。"""
+    __tablename__ = "statements"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    credit_account_id = Column(Integer, ForeignKey("credit_accounts.id"), nullable=False, index=True)
+    period_start = Column(Date, nullable=False)
+    period_end = Column(Date, nullable=False)
+    statement_date = Column(Date, nullable=False)
+    due_date = Column(Date, nullable=False)
+    statement_amount = Column(Float, nullable=False)
+    minimum_due = Column(Float, nullable=True)
+    created_at = Column(DateTime, server_default=func.now())
+
+    credit_account = relationship("CreditAccount")
+
+
+class Payment(Base):
+    """還款紀錄，跟 Statement 分開存——可以先繳款，之後才配對到某一期帳單。"""
+    __tablename__ = "payments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    statement_id = Column(Integer, ForeignKey("statements.id"), nullable=True, index=True)
+    from_account_id = Column(Integer, ForeignKey("cards.id"), nullable=True, index=True)
+    amount = Column(Float, nullable=False)
+    payment_date = Column(Date, nullable=False)
+    created_at = Column(DateTime, server_default=func.now())
+
+    statement = relationship("Statement")
+    from_account = relationship("Card")
 
 
 class PendingBankScreenshot(Base):

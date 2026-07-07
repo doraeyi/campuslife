@@ -1,3 +1,5 @@
+from datetime import date
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
@@ -52,6 +54,7 @@ def create_transaction(
     data["amount"] = amount
     data["transaction_type"] = tx_type
     data["cod_paid"] = not payload.is_cod
+    data["transaction_date"] = date.fromisoformat(payload.date) if payload.date else date.today()
     if not data.get("description"):
         data["description"] = data.get("note") or ""
     tx = models.Transaction(user_id=current_user.id, **data)
