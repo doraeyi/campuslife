@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../features/bank_notify/providers/bank_notify_pending_provider.dart';
 import '../models/card_model.dart';
@@ -11,6 +12,10 @@ import '../models/transaction.dart';
 import '../providers/auth_provider.dart';
 import '../services/api_client.dart';
 import 'edit_transaction_sheet.dart';
+
+// 用來代表「現金」跟「全部」這兩個非實體卡片的虛擬頁面 key（存排序偏好用）
+const _kCashType = 'cash';
+const _kAllKey = 'all';
 
 class HomeTab extends ConsumerStatefulWidget {
   const HomeTab({super.key});
@@ -23,6 +28,7 @@ class _HomeTabState extends ConsumerState<HomeTab> {
   final _api = ApiClient();
   List<AppCard> _cards = [];
   List<Transaction> _transactions = [];
+  List<String> _pageOrder = [];
   bool _loading = true;
   int _page = 0;
   late final PageController _pageController;
@@ -31,6 +37,7 @@ class _HomeTabState extends ConsumerState<HomeTab> {
   void initState() {
     super.initState();
     _pageController = PageController();
+    _loadPageOrder();
     _load();
   }
 
@@ -58,6 +65,22 @@ class _HomeTabState extends ConsumerState<HomeTab> {
     }
   }
 
+  Future<void> _loadPageOrder() async {
+    final prefs = await SharedPreferences.getInstance();
+    final saved = prefs.getStringList('home_ring_page_order');
+    if (saved != null && mounted) setState(() => _pageOrder = saved);
+  }
+
+  Future<void> _savePageOrder(List<String> order) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList('home_ring_page_order', order);
+    setState(() {
+      _pageOrder = order;
+      _page = 0;
+    });
+    if (_pageController.hasClients) _pageController.jumpToPage(0);
+  }
+
   // 有哪些卡片類型（按出現順序去重）
   List<String> get _availableTypes {
     final seen = <String>{};
@@ -68,21 +91,41 @@ class _HomeTabState extends ConsumerState<HomeTab> {
     return types;
   }
 
-  // 頁面列表：第 0 頁是「全部」，之後每個有卡片的類型一頁
-  List<String?> get _pages => [null, ..._availableTypes];
+  String _keyFor(String? type) => type ?? _kAllKey;
+  String? _typeFor(String key) => key == _kAllKey ? null : key;
 
-  List<AppCard> _cardsOf(String? type) =>
-      type == null ? _cards : _cards.where((c) => c.type == type).toList();
+  // 頁面列表：預設是「全部」「現金」+ 每個有卡片的類型各一頁，
+  // 使用者長按圓圈圖可以自訂順序（存在本機，新出現的類型會排在最後面）
+  List<String?> get _pages {
+    final available = <String>[_kAllKey, _kCashType, ..._availableTypes];
+    final ordered = <String>[];
+    for (final key in _pageOrder) {
+      if (available.contains(key) && !ordered.contains(key)) ordered.add(key);
+    }
+    for (final key in available) {
+      if (!ordered.contains(key)) ordered.add(key);
+    }
+    return ordered.map(_typeFor).toList();
+  }
+
+  List<AppCard> _cardsOf(String? type) {
+    if (type == null) return _cards;
+    if (type == _kCashType) return const [];
+    return _cards.where((c) => c.type == type).toList();
+  }
 
   List<Transaction> _txOf(String? type) {
     final now = DateTime.now();
-    final ids = _cardsOf(type).map((c) => c.id).toSet();
+    final ids = (type != null && type != _kCashType)
+        ? _cardsOf(type).map((c) => c.id).toSet()
+        : null;
     return _transactions.where((t) {
       if (t.createdAt.year != now.year || t.createdAt.month != now.month) {
         return false;
       }
       if (type == null) return true;
-      return t.cardId != null && ids.contains(t.cardId);
+      if (type == _kCashType) return t.cardId == null;
+      return t.cardId != null && ids!.contains(t.cardId);
     }).toList();
   }
 
@@ -99,11 +142,14 @@ class _HomeTabState extends ConsumerState<HomeTab> {
 
   // 是否有貨到付款尚未付款的紀錄（不限本月，付清前持續提醒）
   bool _hasUnpaidCod(String? type) {
-    final ids = _cardsOf(type).map((c) => c.id).toSet();
+    final ids = (type != null && type != _kCashType)
+        ? _cardsOf(type).map((c) => c.id).toSet()
+        : null;
     return _transactions.any((t) {
       if (!t.isCodUnpaid) return false;
       if (type == null) return true;
-      return t.cardId != null && ids.contains(t.cardId);
+      if (type == _kCashType) return t.cardId == null;
+      return t.cardId != null && ids!.contains(t.cardId);
     });
   }
 
@@ -217,9 +263,10 @@ class _HomeTabState extends ConsumerState<HomeTab> {
 
                         const SizedBox(height: 24),
 
-                        // ── 圓圈 + PageView（點下去看所有紀錄）──────────────
+                        // ── 圓圈 + PageView（點下去看所有紀錄，長按調順序）──
                         GestureDetector(
                           onTap: () => context.push('/wallet'),
+                          onLongPress: _openReorderSheet,
                           child: SizedBox(
                             height: 220,
                             child: pages.isEmpty
@@ -399,6 +446,7 @@ class _HomeTabState extends ConsumerState<HomeTab> {
         'credit' => '💳 信用卡',
         'debit' => '🏧 金融卡',
         'easycard' => '🚌 悠遊卡',
+        _kCashType => '💵 現金',
         _ => '🗂 全部',
       };
 
@@ -408,8 +456,74 @@ class _HomeTabState extends ConsumerState<HomeTab> {
       'credit' => const Color(0xFF6366F1),
       'debit' => const Color(0xFF0EA5E9),
       'easycard' => const Color(0xFF10B981),
+      _kCashType => const Color(0xFF14B8A6),
       _ => Theme.of(context).colorScheme.primary,
     };
+  }
+
+  // 長按圓圈圖：讓使用者拖曳調整頁面順序（存在本機，決定想先看哪張卡/現金/全部）
+  Future<void> _openReorderSheet() async {
+    var order = _pages.map(_keyFor).toList();
+    final result = await showModalBottomSheet<List<String>>(
+      context: context,
+      isScrollControlled: true,
+      useRootNavigator: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setLocal) => Padding(
+          padding: EdgeInsets.fromLTRB(
+              20, 20, 20, MediaQuery.of(ctx).viewInsets.bottom + 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Text('調整顯示順序',
+                      style:
+                          TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+                  const Spacer(),
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx, order),
+                    child: const Text('完成'),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Text('長按拖曳排序，決定想先看哪一頁',
+                  style: TextStyle(
+                      fontSize: 12, color: Theme.of(ctx).colorScheme.outline)),
+              const SizedBox(height: 8),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 360),
+                child: ReorderableListView(
+                  shrinkWrap: true,
+                  onReorder: (oldIndex, newIndex) {
+                    setLocal(() {
+                      if (newIndex > oldIndex) newIndex--;
+                      final item = order.removeAt(oldIndex);
+                      order.insert(newIndex, item);
+                    });
+                  },
+                  children: [
+                    for (final key in order)
+                      ListTile(
+                        key: ValueKey(key),
+                        title: Text(_typeLabel(_typeFor(key))),
+                        trailing:
+                            const Icon(Icons.drag_handle_rounded, size: 20),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (result != null) await _savePageOrder(result);
   }
 }
 
