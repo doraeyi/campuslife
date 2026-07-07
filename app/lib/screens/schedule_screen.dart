@@ -278,6 +278,7 @@ class ScheduleScreenState extends State<ScheduleScreen> {
                         // ── Salary card ───────────────────────────────
                         if (_salaryJob != null)
                           _SalaryCard(
+                            key: ValueKey(_salaryJob!.id),
                             selectedJob: _salaryJob!,
                             month: _focusedDay,
                             shiftsInMonth: salaryShifts,
@@ -769,6 +770,7 @@ class _MultiSelectBanner extends StatelessWidget {
 // ── Salary card ────────────────────────────────────────────────────────────
 class _SalaryCard extends StatefulWidget {
   const _SalaryCard({
+    super.key,
     required this.selectedJob,
     required this.month,
     required this.shiftsInMonth,
@@ -804,6 +806,9 @@ class _SalaryCardState extends State<_SalaryCard> {
     if (oldWidget.selectedJob.id != widget.selectedJob.id ||
         oldWidget.month.year != widget.month.year ||
         oldWidget.month.month != widget.month.month) {
+      // 先清掉舊工作/舊月份留下的狀態，避免重新查詢完成前，
+      // 畫面短暫沿用上一個工作的「已入帳」狀態
+      setState(() => _alreadyRecorded = false);
       _checkAlreadyRecorded();
     }
   }
@@ -820,6 +825,7 @@ class _SalaryCardState extends State<_SalaryCard> {
       if (mounted) setState(() => _alreadyRecorded = found);
     } catch (_) {
       // 查不到就當作沒記錄過，不要因為網路問題卡住使用者
+      if (mounted) setState(() => _alreadyRecorded = false);
     }
   }
 
