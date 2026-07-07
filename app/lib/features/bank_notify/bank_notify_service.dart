@@ -25,8 +25,10 @@ class BankNotifyService {
   }
 
   String buildDedupKey(ParsedBankTransaction parsed) {
+    String pad(int n) => n.toString().padLeft(2, '0');
     final minuteBucket = parsed.time != null
-        ? '${parsed.time!.year}${parsed.time!.month}${parsed.time!.day}${parsed.time!.hour}${parsed.time!.minute}'
+        ? '${parsed.time!.year}-${pad(parsed.time!.month)}-${pad(parsed.time!.day)}'
+            'T${pad(parsed.time!.hour)}:${pad(parsed.time!.minute)}'
         : 'no-time';
     return '${parsed.bankId}|${parsed.amount}|${parsed.cardLastFour ?? '-'}|$minuteBucket';
   }

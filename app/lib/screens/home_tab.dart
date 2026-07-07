@@ -24,7 +24,7 @@ class HomeTab extends ConsumerStatefulWidget {
   ConsumerState<HomeTab> createState() => _HomeTabState();
 }
 
-class _HomeTabState extends ConsumerState<HomeTab> {
+class _HomeTabState extends ConsumerState<HomeTab> with WidgetsBindingObserver {
   final _api = ApiClient();
   List<AppCard> _cards = [];
   List<Transaction> _transactions = [];
@@ -36,6 +36,7 @@ class _HomeTabState extends ConsumerState<HomeTab> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _pageController = PageController();
     _loadPageOrder();
     _load();
@@ -43,11 +44,20 @@ class _HomeTabState extends ConsumerState<HomeTab> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _pageController.dispose();
     super.dispose();
   }
 
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      ref.invalidate(bankNotifyPendingCountProvider);
+    }
+  }
+
   Future<void> _load() async {
+    ref.invalidate(bankNotifyPendingCountProvider);
     try {
       final results = await Future.wait([
         _api.fetchCards(),
