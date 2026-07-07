@@ -7,6 +7,7 @@ class AppCard {
   final String? bank;
   final double? balance;
   final double? dueAmount;
+  final double? creditLimit;
   final String? passExpiryDate;
   final String? paymentDueDate;
   final int? reminderDay;
@@ -20,6 +21,7 @@ class AppCard {
     this.bank,
     this.balance,
     this.dueAmount,
+    this.creditLimit,
     this.passExpiryDate,
     this.paymentDueDate,
     this.reminderDay,
@@ -34,6 +36,7 @@ class AppCard {
         bank: json['bank'] as String?,
         balance: (json['balance'] as num?)?.toDouble(),
         dueAmount: (json['due_amount'] as num?)?.toDouble(),
+        creditLimit: (json['credit_limit'] as num?)?.toDouble(),
         passExpiryDate: json['pass_expiry_date'] as String?,
         paymentDueDate: json['payment_due_date'] as String?,
         reminderDay: json['reminder_day'] as int?,

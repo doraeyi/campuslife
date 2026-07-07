@@ -67,6 +67,7 @@ class Card(Base):
     bank = Column(String(100), nullable=True)
     balance = Column(Float, nullable=True)
     due_amount = Column(Float, nullable=True)
+    credit_limit = Column(Float, nullable=True)
     pass_expiry_date = Column(String(10), nullable=True)
     payment_due_date = Column(String(10), nullable=True)
     reminder_day = Column(Integer, nullable=True)

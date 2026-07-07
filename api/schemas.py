@@ -195,6 +195,7 @@ class CardBase(BaseModel):
     bank: str | None = None
     balance: float | None = None
     due_amount: float | None = None
+    credit_limit: float | None = None
     pass_expiry_date: str | None = None
     payment_due_date: str | None = None
     reminder_day: int | None = None

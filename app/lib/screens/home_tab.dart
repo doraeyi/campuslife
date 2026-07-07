@@ -12,6 +12,7 @@ import '../models/transaction.dart';
 import '../providers/auth_provider.dart';
 import '../services/api_client.dart';
 import 'edit_transaction_sheet.dart';
+import 'wallet_screen.dart' show WalletFilter;
 
 // 用來代表「現金」跟「全部」這兩個非實體卡片的虛擬頁面 key（存排序偏好用）
 const _kCashType = 'cash';
@@ -82,32 +83,40 @@ class _HomeTabState extends ConsumerState<HomeTab> with WidgetsBindingObserver {
   }
 
   Future<void> _savePageOrder(List<String> order) async {
+    final available = <String>{
+      _kAllKey,
+      _kCashType,
+      ..._cards.map((c) => 'card_${c.id}'),
+    };
+    final pruned = order.where(available.contains).toList();
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setStringList('home_ring_page_order', order);
+    await prefs.setStringList('home_ring_page_order', pruned);
     setState(() {
-      _pageOrder = order;
+      _pageOrder = pruned;
       _page = 0;
     });
     if (_pageController.hasClients) _pageController.jumpToPage(0);
   }
 
-  // 有哪些卡片類型（按出現順序去重）
-  List<String> get _availableTypes {
-    final seen = <String>{};
-    final types = <String>[];
+  // key 是 'card_<id>' 時解析出對應卡片，其餘（'all'/'cash'）回傳 null
+  AppCard? _cardForKey(String key) {
+    if (!key.startsWith('card_')) return null;
+    final id = int.tryParse(key.substring(5));
+    if (id == null) return null;
     for (final c in _cards) {
-      if (seen.add(c.type)) types.add(c.type);
+      if (c.id == id) return c;
     }
-    return types;
+    return null;
   }
 
-  String _keyFor(String? type) => type ?? _kAllKey;
-  String? _typeFor(String key) => key == _kAllKey ? null : key;
-
-  // 頁面列表：預設是「全部」「現金」+ 每個有卡片的類型各一頁，
-  // 使用者長按圓圈圖可以自訂順序（存在本機，新出現的類型會排在最後面）
-  List<String?> get _pages {
-    final available = <String>[_kAllKey, _kCashType, ..._availableTypes];
+  // 頁面列表：「全部」「現金」+ 每張卡各自一頁，
+  // 使用者長按圓圈圖可以自訂順序（存在本機，新出現的卡片會排在最後面）
+  List<String> get _pageKeys {
+    final available = <String>[
+      _kAllKey,
+      _kCashType,
+      ..._cards.map((c) => 'card_${c.id}'),
+    ];
     final ordered = <String>[];
     for (final key in _pageOrder) {
       if (available.contains(key) && !ordered.contains(key)) ordered.add(key);
@@ -115,51 +124,48 @@ class _HomeTabState extends ConsumerState<HomeTab> with WidgetsBindingObserver {
     for (final key in available) {
       if (!ordered.contains(key)) ordered.add(key);
     }
-    return ordered.map(_typeFor).toList();
+    return ordered;
   }
 
-  List<AppCard> _cardsOf(String? type) {
-    if (type == null) return _cards;
-    if (type == _kCashType) return const [];
-    return _cards.where((c) => c.type == type).toList();
+  List<AppCard> _cardsOf(String key) {
+    if (key == _kAllKey) return _cards;
+    if (key == _kCashType) return const [];
+    final c = _cardForKey(key);
+    return c == null ? const [] : [c];
   }
 
-  List<Transaction> _txOf(String? type) {
+  List<Transaction> _txOf(String key) {
     final now = DateTime.now();
-    final ids = (type != null && type != _kCashType)
-        ? _cardsOf(type).map((c) => c.id).toSet()
-        : null;
+    final cardId = _cardForKey(key)?.id;
     return _transactions.where((t) {
       if (t.createdAt.year != now.year || t.createdAt.month != now.month) {
         return false;
       }
-      if (type == null) return true;
-      if (type == _kCashType) return t.cardId == null;
-      return t.cardId != null && ids!.contains(t.cardId);
+      if (key == _kAllKey) return true;
+      if (key == _kCashType) return t.cardId == null;
+      return cardId != null && t.cardId == cardId;
     }).toList();
   }
 
-  double _expense(String? type) => _txOf(type)
+  double _expense(String key) => _txOf(key)
       .where((t) => t.amount < 0 && !t.isCodUnpaid)
       .fold(0.0, (s, t) => s + t.amount.abs());
 
-  double _income(String? type) => _txOf(type)
+  double _income(String key) => _txOf(key)
       .where((t) => t.amount > 0 && !t.isCodUnpaid)
       .fold(0.0, (s, t) => s + t.amount);
 
-  double _balance(String? type) =>
-      _cardsOf(type).fold(0.0, (s, c) => s + (c.balance ?? 0));
+  double _balance(String key) =>
+      _cardsOf(key).fold(0.0, (s, c) => s + (c.balance ?? 0));
 
   // 是否有貨到付款尚未付款的紀錄（不限本月，付清前持續提醒）
-  bool _hasUnpaidCod(String? type) {
-    final ids = (type != null && type != _kCashType)
-        ? _cardsOf(type).map((c) => c.id).toSet()
-        : null;
+  bool _hasUnpaidCod(String key) {
+    final cardId = _cardForKey(key)?.id;
     return _transactions.any((t) {
       if (!t.isCodUnpaid) return false;
-      if (type == null) return true;
-      if (type == _kCashType) return t.cardId == null;
-      return t.cardId != null && ids!.contains(t.cardId);
+      if (key == _kAllKey) return true;
+      if (key == _kCashType) return t.cardId == null;
+      return cardId != null && t.cardId == cardId;
     });
   }
 
@@ -191,13 +197,14 @@ class _HomeTabState extends ConsumerState<HomeTab> with WidgetsBindingObserver {
   Widget build(BuildContext context) {
     final user = ref.watch(authProvider).value;
     final now = DateTime.now();
-    final pages = _pages;
-    final currentType = _page < pages.length ? pages[_page] : null;
+    final pages = _pageKeys;
+    final page = pages.isEmpty ? 0 : _page.clamp(0, pages.length - 1);
+    final currentKey = pages.isEmpty ? _kAllKey : pages[page];
 
-    final expense = _expense(currentType);
-    final income = _income(currentType);
+    final expense = _expense(currentKey);
+    final income = _income(currentKey);
     final net = income - expense;
-    final recentTx = _txOf(currentType).take(5).toList();
+    final recentTx = _txOf(currentKey).take(5).toList();
 
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.surfaceContainerLowest,
@@ -273,9 +280,18 @@ class _HomeTabState extends ConsumerState<HomeTab> with WidgetsBindingObserver {
 
                         const SizedBox(height: 24),
 
-                        // ── 圓圈 + PageView（點下去看所有紀錄，長按調順序）──
+                        // ── 圓圈 + PageView（點下去看該頁的紀錄，長按調順序）──
                         GestureDetector(
-                          onTap: () => context.push('/wallet'),
+                          onTap: () {
+                            final card = _cardForKey(currentKey);
+                            context.push(
+                              '/wallet',
+                              extra: WalletFilter(
+                                cardId: card?.id,
+                                cashOnly: currentKey == _kCashType,
+                              ),
+                            );
+                          },
                           onLongPress: _openReorderSheet,
                           child: SizedBox(
                             height: 220,
@@ -292,27 +308,39 @@ class _HomeTabState extends ConsumerState<HomeTab> with WidgetsBindingObserver {
                                     onPageChanged: (i) =>
                                         setState(() => _page = i),
                                     itemBuilder: (_, i) {
-                                      final type = pages[i];
-                                      final cards = _cardsOf(type);
-                                      final hasUnpaidCod = _hasUnpaidCod(type);
+                                      final key = pages[i];
+                                      final card = _cardForKey(key);
+                                      final hasUnpaidCod = _hasUnpaidCod(key);
                                       final hasLoan =
-                                          type == null && _hasOutstandingLoan;
+                                          key == _kAllKey && _hasOutstandingLoan;
                                       final hasWarning =
                                           hasUnpaidCod || hasLoan;
                                       final color = hasWarning
                                           ? const Color(0xFFF59E0B)
-                                          : _typeColor(type, cards, context);
-                                      final showBalance =
-                                          type == 'debit' || type == 'easycard';
+                                          : _typeColor(key, context);
+                                      final showBalance = card != null &&
+                                          (card.type == 'debit' ||
+                                              card.type == 'easycard');
                                       final value = showBalance
-                                          ? _balance(type)
-                                          : _income(type) - _expense(type);
+                                          ? _balance(key)
+                                          : _income(key) - _expense(key);
+                                      double? availableCredit;
+                                      if (card != null &&
+                                          card.type == 'credit' &&
+                                          card.creditLimit != null) {
+                                        final used =
+                                            card.dueAmount ?? _expense(key);
+                                        availableCredit =
+                                            card.creditLimit! - used;
+                                      }
                                       return _RingChart(
                                         net: value,
                                         label: showBalance ? '剩餘金額' : '月結餘',
                                         color: color,
                                         hasUnpaidCod: hasUnpaidCod,
                                         hasOutstandingLoan: hasLoan,
+                                        creditLimit: card?.creditLimit,
+                                        availableCredit: availableCredit,
                                       );
                                     },
                                   ),
@@ -323,7 +351,7 @@ class _HomeTabState extends ConsumerState<HomeTab> with WidgetsBindingObserver {
 
                         // ── 類型標籤 + 點點 ────────────────────────────────
                         Text(
-                          _typeLabel(currentType),
+                          _typeLabel(currentKey),
                           style: TextStyle(
                             fontSize: 13,
                             fontWeight: FontWeight.w600,
@@ -332,19 +360,19 @@ class _HomeTabState extends ConsumerState<HomeTab> with WidgetsBindingObserver {
                         ),
                         const SizedBox(height: 8),
                         if (pages.length > 1)
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
+                          Wrap(
+                            alignment: WrapAlignment.center,
                             children: List.generate(
                               pages.length,
                               (i) => AnimatedContainer(
                                 duration: const Duration(milliseconds: 200),
                                 margin:
-                                    const EdgeInsets.symmetric(horizontal: 3),
-                                width: i == _page ? 16 : 6,
+                                    const EdgeInsets.symmetric(horizontal: 3, vertical: 3),
+                                width: i == page ? 16 : 6,
                                 height: 6,
                                 decoration: BoxDecoration(
                                   borderRadius: BorderRadius.circular(3),
-                                  color: i == _page
+                                  color: i == page
                                       ? Theme.of(context).colorScheme.primary
                                       : Theme.of(context)
                                           .colorScheme
@@ -452,20 +480,23 @@ class _HomeTabState extends ConsumerState<HomeTab> with WidgetsBindingObserver {
     );
   }
 
-  String _typeLabel(String? type) => switch (type) {
-        'credit' => '💳 信用卡',
-        'debit' => '🏧 金融卡',
-        'easycard' => '🚌 悠遊卡',
-        _kCashType => '💵 現金',
-        _ => '🗂 全部',
-      };
+  String _typeLabel(String key) {
+    if (key == _kCashType) return '💵 現金';
+    final card = _cardForKey(key);
+    if (card == null) return '🗂 全部';
+    final emoji = switch (card.type) {
+      'credit' => '💳',
+      'debit' => '🏧',
+      'easycard' => '🚌',
+      _ => '💳',
+    };
+    return '$emoji ${card.name}';
+  }
 
-  Color _typeColor(String? type, List<AppCard> cards, BuildContext context) {
-    if (cards.isNotEmpty) return _hexColor(cards.first.color);
-    return switch (type) {
-      'credit' => const Color(0xFF6366F1),
-      'debit' => const Color(0xFF0EA5E9),
-      'easycard' => const Color(0xFF10B981),
+  Color _typeColor(String key, BuildContext context) {
+    final card = _cardForKey(key);
+    if (card != null) return _hexColor(card.color);
+    return switch (key) {
       _kCashType => const Color(0xFF14B8A6),
       _ => Theme.of(context).colorScheme.primary,
     };
@@ -473,7 +504,7 @@ class _HomeTabState extends ConsumerState<HomeTab> with WidgetsBindingObserver {
 
   // 長按圓圈圖：讓使用者拖曳調整頁面順序（存在本機，決定想先看哪張卡/現金/全部）
   Future<void> _openReorderSheet() async {
-    var order = _pages.map(_keyFor).toList();
+    var order = List<String>.from(_pageKeys);
     final result = await showModalBottomSheet<List<String>>(
       context: context,
       isScrollControlled: true,
@@ -521,7 +552,7 @@ class _HomeTabState extends ConsumerState<HomeTab> with WidgetsBindingObserver {
                     for (final key in order)
                       ListTile(
                         key: ValueKey(key),
-                        title: Text(_typeLabel(_typeFor(key))),
+                        title: Text(_typeLabel(key)),
                         trailing:
                             const Icon(Icons.drag_handle_rounded, size: 20),
                       ),
@@ -546,6 +577,8 @@ class _RingChart extends StatelessWidget {
     required this.color,
     this.hasUnpaidCod = false,
     this.hasOutstandingLoan = false,
+    this.creditLimit,
+    this.availableCredit,
   });
 
   final double net;
@@ -553,6 +586,8 @@ class _RingChart extends StatelessWidget {
   final Color color;
   final bool hasUnpaidCod;
   final bool hasOutstandingLoan;
+  final double? creditLimit;
+  final double? availableCredit;
 
   @override
   Widget build(BuildContext context) {
@@ -601,6 +636,16 @@ class _RingChart extends StatelessWidget {
                   const Text(
                     '⚠ 有借款未還',
                     style: TextStyle(fontSize: 11, color: Color(0xFFF59E0B)),
+                  ),
+                ],
+                if (creditLimit != null && availableCredit != null) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    '可用 ${fmt.format(availableCredit)}／額度 ${fmt.format(creditLimit)}',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: Theme.of(context).colorScheme.outline,
+                    ),
                   ),
                 ],
               ],

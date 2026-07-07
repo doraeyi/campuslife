@@ -9,8 +9,16 @@ import '../services/notification_service.dart';
 import 'add_transaction_sheet.dart';
 import 'edit_transaction_sheet.dart';
 
+// 用來從其他頁面（例如首頁圓環）帶著目前範圍跳轉過來，決定一開始要看哪個範圍的紀錄
+class WalletFilter {
+  const WalletFilter({this.cardId, this.cashOnly = false});
+  final int? cardId;
+  final bool cashOnly;
+}
+
 class WalletScreen extends ConsumerStatefulWidget {
-  const WalletScreen({super.key});
+  const WalletScreen({super.key, this.filter});
+  final WalletFilter? filter;
 
   @override
   ConsumerState<WalletScreen> createState() => _WalletScreenState();
@@ -18,15 +26,41 @@ class WalletScreen extends ConsumerStatefulWidget {
 
 class _WalletScreenState extends ConsumerState<WalletScreen> {
   final _api = ApiClient();
+  late final PageController _cardPageController;
   List<AppCard> _cards = [];
   List<Transaction> _transactions = [];
   bool _loading = true;
   int _cardPage = 0;
+  late String _scope; // 'all' | 'cash' | 'card_<id>'
+  bool _scopeInitialized = false;
 
   @override
   void initState() {
     super.initState();
+    _cardPageController = PageController(viewportFraction: 0.88);
+    if (widget.filter?.cashOnly == true) {
+      _scope = 'cash';
+    } else if (widget.filter?.cardId != null) {
+      _scope = 'card_${widget.filter!.cardId}';
+    } else {
+      _scope = 'all';
+    }
     _load();
+  }
+
+  @override
+  void dispose() {
+    _cardPageController.dispose();
+    super.dispose();
+  }
+
+  List<Transaction> get _visibleTransactions {
+    if (_scope == 'all') return _transactions;
+    if (_scope == 'cash') {
+      return _transactions.where((t) => t.cardId == null).toList();
+    }
+    final id = int.tryParse(_scope.substring('card_'.length));
+    return _transactions.where((t) => t.cardId == id).toList();
   }
 
   Future<void> _load() async {
@@ -41,6 +75,21 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
           _cards = cards;
           _transactions = results[1] as List<Transaction>;
           _loading = false;
+          if (!_scopeInitialized) {
+            _scopeInitialized = true;
+            if (_scope.startsWith('card_')) {
+              final id = int.parse(_scope.substring('card_'.length));
+              final index = cards.indexWhere((c) => c.id == id);
+              if (index >= 0) {
+                _cardPage = index;
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (_cardPageController.hasClients) {
+                    _cardPageController.jumpToPage(index);
+                  }
+                });
+              }
+            }
+          }
         });
         await NotificationService().checkCreditCardDueDates(cards);
       }
@@ -116,6 +165,8 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
         text: card.balance != null ? card.balance!.toStringAsFixed(0) : '');
     final dueAmountCtrl = TextEditingController(
         text: card.dueAmount != null ? card.dueAmount!.toStringAsFixed(0) : '');
+    final creditLimitCtrl = TextEditingController(
+        text: card.creditLimit != null ? card.creditLimit!.toStringAsFixed(0) : '');
     final dueDayCtrl = TextEditingController(text: card.paymentDueDate ?? '');
     final reminderDayCtrl =
         TextEditingController(text: card.reminderDay?.toString() ?? '');
@@ -193,6 +244,14 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
                   controller: dueAmountCtrl,
                   decoration: const InputDecoration(
                       labelText: '目前需要繳的金額（選填）', prefixText: '\$ '),
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: creditLimitCtrl,
+                  decoration: const InputDecoration(
+                      labelText: '信用額度（選填，用來換算可用額度）', prefixText: '\$ '),
                   keyboardType:
                       const TextInputType.numberWithOptions(decimal: true),
                 ),
@@ -276,6 +335,7 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
               : lastFourCtrl.text.trim(),
           balance: isCredit ? null : double.tryParse(balanceCtrl.text),
           dueAmount: isCredit ? double.tryParse(dueAmountCtrl.text) : null,
+          creditLimit: isCredit ? double.tryParse(creditLimitCtrl.text) : null,
           paymentDueDate: isCredit && dueDayCtrl.text.trim().isNotEmpty
               ? dueDayCtrl.text.trim()
               : null,
@@ -307,8 +367,17 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
     if (added == true) await _load();
   }
 
+  String _scopeLabel() {
+    if (_scope == 'all') return '全部';
+    if (_scope == 'cash') return '💵 現金';
+    final id = int.tryParse(_scope.substring('card_'.length));
+    final match = _cards.where((c) => c.id == id);
+    return match.isEmpty ? '全部' : match.first.name;
+  }
+
   @override
   Widget build(BuildContext context) {
+    final visible = _visibleTransactions;
     return Scaffold(
       appBar: AppBar(
         title: const Text('記帳'),
@@ -326,27 +395,63 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
               onRefresh: _load,
               child: CustomScrollView(
                 slivers: [
+                  // ── 範圍切換（全部 / 現金）──────────────────────────────
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                      child: Row(
+                        children: [
+                          ChoiceChip(
+                            label: const Text('🗂 全部'),
+                            selected: _scope == 'all',
+                            onSelected: (_) => setState(() => _scope = 'all'),
+                          ),
+                          const SizedBox(width: 8),
+                          ChoiceChip(
+                            label: const Text('💵 現金'),
+                            selected: _scope == 'cash',
+                            onSelected: (_) => setState(() => _scope = 'cash'),
+                          ),
+                          const Spacer(),
+                          Flexible(
+                            child: Text(
+                              '目前顯示：${_scopeLabel()}',
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Theme.of(context).colorScheme.outline,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                   // ── Card carousel ──────────────────────────────────────
                   SliverToBoxAdapter(
                     child: _cards.isEmpty
                         ? _EmptyCardsHint()
                         : _CardCarousel(
                             cards: _cards,
+                            controller: _cardPageController,
                             currentIndex: _cardPage,
-                            onPageChanged: (i) => setState(() => _cardPage = i),
+                            onPageChanged: (i) => setState(() {
+                              _cardPage = i;
+                              _scope = 'card_${_cards[i].id}';
+                            }),
                             onUpdateBalance: _showUpdateBalance,
                             onEdit: _showEditCard,
                           ),
                   ),
                   // ── Transaction list ───────────────────────────────────
-                  if (_transactions.isEmpty)
+                  if (visible.isEmpty)
                     const SliverFillRemaining(
                       hasScrollBody: false,
                       child: _EmptyTransactionsHint(),
                     )
                   else
                     _TransactionSliver(
-                      transactions: _transactions,
+                      transactions: visible,
                       onDelete: _deleteTransaction,
                       onMarkPaid: _markCodPaid,
                       onTap: _openEditTransaction,
@@ -362,6 +467,7 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
 class _CardCarousel extends StatelessWidget {
   const _CardCarousel({
     required this.cards,
+    required this.controller,
     required this.currentIndex,
     required this.onPageChanged,
     required this.onUpdateBalance,
@@ -369,6 +475,7 @@ class _CardCarousel extends StatelessWidget {
   });
 
   final List<AppCard> cards;
+  final PageController controller;
   final int currentIndex;
   final ValueChanged<int> onPageChanged;
   final ValueChanged<AppCard> onUpdateBalance;
@@ -381,7 +488,7 @@ class _CardCarousel extends StatelessWidget {
         SizedBox(
           height: 190,
           child: PageView.builder(
-            controller: PageController(viewportFraction: 0.88),
+            controller: controller,
             itemCount: cards.length,
             onPageChanged: onPageChanged,
             itemBuilder: (_, i) => _CardTile(

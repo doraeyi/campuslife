@@ -89,7 +89,9 @@ final appRouter = GoRouter(
         ),
         GoRoute(
           path: '/wallet',
-          pageBuilder: (_, __) => const NoTransitionPage(child: WalletScreen()),
+          pageBuilder: (_, state) => NoTransitionPage(
+            child: WalletScreen(filter: state.extra as WalletFilter?),
+          ),
         ),
         GoRoute(
           path: '/statements',

@@ -304,6 +304,7 @@ class _CardFormSheetState extends State<_CardFormSheet> {
   late final TextEditingController _lastFourCtrl;
   late final TextEditingController _balanceCtrl;
   late final TextEditingController _dueAmountCtrl;
+  late final TextEditingController _creditLimitCtrl;
   late final TextEditingController _paymentDueDateCtrl;
   late final TextEditingController _reminderDayCtrl;
   String _type = 'credit';
@@ -334,6 +335,8 @@ class _CardFormSheetState extends State<_CardFormSheet> {
         text: c?.balance != null ? c!.balance!.toStringAsFixed(0) : '');
     _dueAmountCtrl = TextEditingController(
         text: c?.dueAmount != null ? c!.dueAmount!.toStringAsFixed(0) : '');
+    _creditLimitCtrl = TextEditingController(
+        text: c?.creditLimit != null ? c!.creditLimit!.toStringAsFixed(0) : '');
     _paymentDueDateCtrl = TextEditingController(text: c?.paymentDueDate ?? '');
     _reminderDayCtrl = TextEditingController(text: c?.reminderDay?.toString() ?? '');
     _type = c?.type ?? 'credit';
@@ -347,6 +350,7 @@ class _CardFormSheetState extends State<_CardFormSheet> {
     _lastFourCtrl.dispose();
     _balanceCtrl.dispose();
     _dueAmountCtrl.dispose();
+    _creditLimitCtrl.dispose();
     _paymentDueDateCtrl.dispose();
     _reminderDayCtrl.dispose();
     super.dispose();
@@ -365,6 +369,7 @@ class _CardFormSheetState extends State<_CardFormSheet> {
     try {
       final balance = _showBalance ? double.tryParse(_balanceCtrl.text) : null;
       final dueAmount = _isCredit ? double.tryParse(_dueAmountCtrl.text) : null;
+      final creditLimit = _isCredit ? double.tryParse(_creditLimitCtrl.text) : null;
       final paymentDueDate = _isCredit && _paymentDueDateCtrl.text.trim().isNotEmpty
           ? _paymentDueDateCtrl.text.trim()
           : null;
@@ -382,6 +387,7 @@ class _CardFormSheetState extends State<_CardFormSheet> {
           lastFour: lastFour,
           balance: balance,
           dueAmount: dueAmount,
+          creditLimit: creditLimit,
           paymentDueDate: paymentDueDate,
           reminderDay: reminderDay,
         );
@@ -395,6 +401,7 @@ class _CardFormSheetState extends State<_CardFormSheet> {
           lastFour: lastFour,
           balance: balance,
           dueAmount: dueAmount,
+          creditLimit: creditLimit,
           paymentDueDate: paymentDueDate,
           reminderDay: reminderDay,
         );
@@ -553,6 +560,17 @@ class _CardFormSheetState extends State<_CardFormSheet> {
                   controller: _dueAmountCtrl,
                   decoration: const InputDecoration(
                     labelText: '目前需要繳的金額（選填）',
+                    prefixText: '\$ ',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _creditLimitCtrl,
+                  decoration: const InputDecoration(
+                    labelText: '信用額度（選填，用來換算可用額度）',
                     prefixText: '\$ ',
                     border: OutlineInputBorder(),
                     isDense: true,
