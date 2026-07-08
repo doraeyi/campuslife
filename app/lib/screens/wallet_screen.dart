@@ -416,73 +416,79 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
-          : RefreshIndicator(
-              onRefresh: _load,
-              child: CustomScrollView(
-                slivers: [
-                  // ── 範圍切換（全部 / 現金）──────────────────────────────
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                      child: Row(
-                        children: [
-                          ChoiceChip(
-                            label: const Text('🗂 全部'),
-                            selected: _scope == 'all',
-                            onSelected: (_) => setState(() => _scope = 'all'),
-                          ),
-                          const SizedBox(width: 8),
-                          ChoiceChip(
-                            label: const Text('💵 現金'),
-                            selected: _scope == 'cash',
-                            onSelected: (_) => setState(() => _scope = 'cash'),
-                          ),
-                          const Spacer(),
-                          Flexible(
-                            child: Text(
-                              '目前顯示：${_scopeLabel()}',
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Theme.of(context).colorScheme.outline,
-                              ),
-                            ),
-                          ),
-                        ],
+          : Column(
+              children: [
+                // ── 範圍切換（全部 / 現金）── 固定在上面，不隨紀錄捲動 ──────
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                  child: Row(
+                    children: [
+                      ChoiceChip(
+                        label: const Text('🗂 全部'),
+                        selected: _scope == 'all',
+                        onSelected: (_) => setState(() => _scope = 'all'),
                       ),
-                    ),
-                  ),
-                  // ── Card carousel ──────────────────────────────────────
-                  SliverToBoxAdapter(
-                    child: _cards.isEmpty
-                        ? _EmptyCardsHint()
-                        : _CardCarousel(
-                            cards: _cards,
-                            controller: _cardPageController,
-                            currentIndex: _cardPage,
-                            onPageChanged: (i) => setState(() {
-                              _cardPage = i;
-                              _scope = 'card_${_cards[i].id}';
-                            }),
-                            onUpdateBalance: _showUpdateBalance,
-                            onEdit: _showEditCard,
+                      const SizedBox(width: 8),
+                      ChoiceChip(
+                        label: const Text('💵 現金'),
+                        selected: _scope == 'cash',
+                        onSelected: (_) => setState(() => _scope = 'cash'),
+                      ),
+                      const Spacer(),
+                      Flexible(
+                        child: Text(
+                          '目前顯示：${_scopeLabel()}',
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Theme.of(context).colorScheme.outline,
                           ),
+                        ),
+                      ),
+                    ],
                   ),
-                  // ── Transaction list ───────────────────────────────────
-                  if (visible.isEmpty)
-                    const SliverFillRemaining(
-                      hasScrollBody: false,
-                      child: _EmptyTransactionsHint(),
-                    )
-                  else
-                    _TransactionSliver(
-                      transactions: visible,
-                      onDelete: _deleteTransaction,
-                      onMarkPaid: _markCodPaid,
-                      onTap: _openEditTransaction,
+                ),
+                // ── Card carousel ── 現金範圍不是卡片，不顯示卡片輪播 ────────
+                if (_scope != 'cash')
+                  _cards.isEmpty
+                      ? _EmptyCardsHint()
+                      : _CardCarousel(
+                          cards: _cards,
+                          controller: _cardPageController,
+                          currentIndex: _cardPage,
+                          onPageChanged: (i) => setState(() {
+                            _cardPage = i;
+                            _scope = 'card_${_cards[i].id}';
+                          }),
+                          onUpdateBalance: _showUpdateBalance,
+                          onEdit: _showEditCard,
+                        ),
+                // ── Transaction list ── 獨立捲動，卡片區塊不會跟著跑 ────────
+                Expanded(
+                  child: RefreshIndicator(
+                    onRefresh: _load,
+                    child: CustomScrollView(
+                      slivers: [
+                        if (visible.isEmpty)
+                          const SliverFillRemaining(
+                            hasScrollBody: false,
+                            child: _EmptyTransactionsHint(),
+                          )
+                        else ...[
+                          _TransactionSliver(
+                            transactions: visible,
+                            onDelete: _deleteTransaction,
+                            onMarkPaid: _markCodPaid,
+                            onTap: _openEditTransaction,
+                          ),
+                          // 底部留白，避免最後一筆紀錄跟浮動導覽列黏在一起
+                          const SliverToBoxAdapter(child: SizedBox(height: 100)),
+                        ],
+                      ],
                     ),
-                ],
-              ),
+                  ),
+                ),
+              ],
             ),
     );
   }
