@@ -374,6 +374,7 @@ class StatementRead(BaseModel):
 class PaymentCreate(BaseModel):
     statement_id: int | None = None
     from_account_id: int | None = None
+    bank_name: str | None = None
     amount: float
     payment_date: date
 
@@ -381,6 +382,7 @@ class PaymentCreate(BaseModel):
 class PaymentUpdate(BaseModel):
     statement_id: int | None = None
     from_account_id: int | None = None
+    bank_name: str | None = None
     amount: float | None = None
     payment_date: date | None = None
 
@@ -393,9 +395,36 @@ class PaymentRead(BaseModel):
     id: int
     statement_id: int | None
     from_account_id: int | None
+    bank_name: str | None
     amount: float
     payment_date: date
     is_late: bool | None
+
+
+class BankCreditSettingUpdate(BaseModel):
+    billing_day: int | None = None
+    starting_balance: float | None = None
+    starting_balance_date: date | None = None
+
+
+class BankCreditSettingRead(BaseModel):
+    bank_name: str
+    billing_day: int | None
+    starting_balance: float | None
+    starting_balance_date: date | None
+
+
+class BankCreditSummary(BaseModel):
+    bank_name: str
+    credit_limit: float
+    billing_day: int | None
+    last_closing_date: date | None
+    period_due_amount: float  # 本期應繳——結帳當下凍結的金額
+    outstanding_now: float  # 目前實際欠多少（含結帳後新刷的），拿來算可用額度
+    available_credit: float
+    current_window_start_date: date | None  # 「最近紀錄」該從哪一天開始抓：
+    # 從最近一次結帳日開始往前找，直到找到一期在結帳日之後的還款已經
+    # 覆蓋掉那期的應繳金額為止，代表那期已經繳清了，之後的交易才算「這期」
 
 
 class CardBalanceUpdate(BaseModel):

@@ -188,12 +188,32 @@ class Payment(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     statement_id = Column(Integer, ForeignKey("statements.id"), nullable=True, index=True)
     from_account_id = Column(Integer, ForeignKey("cards.id"), nullable=True, index=True)
+    bank_name = Column(String(100), nullable=True, index=True)  # 對應 Card.bank 這個自由文字欄位，還款不綁定單一張卡
     amount = Column(Float, nullable=False)
     payment_date = Column(Date, nullable=False)
     created_at = Column(DateTime, server_default=func.now())
 
     statement = relationship("Statement")
     from_account = relationship("Card")
+
+
+class BankCreditSetting(Base):
+    """信用卡結帳週期設定，依銀行名稱歸戶（不是實體 Bank/CreditAccount 資料表）。
+    billing_day：結帳日（幾號），用來把交易切成「本期」跟「下期」。
+    starting_balance / starting_balance_date：起始基準點——因為 App 只看得到
+    使用者開始用這個功能之後的交易，所以需要一個「當下實際欠多少」的起點，
+    之後才能接著正確滾動累計。
+    """
+    __tablename__ = "bank_credit_settings"
+    __table_args__ = (UniqueConstraint("user_id", "bank_name", name="uq_bank_credit_setting"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    bank_name = Column(String(100), nullable=False)
+    billing_day = Column(Integer, nullable=True)
+    starting_balance = Column(Float, nullable=True)
+    starting_balance_date = Column(Date, nullable=True)
+    created_at = Column(DateTime, server_default=func.now())
 
 
 class PendingBankScreenshot(Base):

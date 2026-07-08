@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../features/bank_notify/providers/bank_notify_pending_provider.dart';
+import '../models/bank_credit_summary.dart';
 import '../models/card_model.dart';
 import '../models/transaction.dart';
 import '../providers/auth_provider.dart';
@@ -29,6 +30,7 @@ class _HomeTabState extends ConsumerState<HomeTab> with WidgetsBindingObserver {
   final _api = ApiClient();
   List<AppCard> _cards = [];
   List<Transaction> _transactions = [];
+  Map<String, BankCreditSummary> _bankSummaries = {};
   List<String> _pageOrder = [];
   bool _loading = true;
   int _page = 0;
@@ -63,10 +65,21 @@ class _HomeTabState extends ConsumerState<HomeTab> with WidgetsBindingObserver {
         _api.fetchCards(),
         _api.fetchTransactions(),
       ]);
+      final cards = results[0] as List<AppCard>;
+      final bankNames = cards
+          .where((c) => c.type == 'credit' && (c.bank?.isNotEmpty ?? false))
+          .map((c) => c.bank!)
+          .toSet();
+      final summaries = <String, BankCreditSummary>{};
+      await Future.wait(bankNames.map((bank) async {
+        final summary = await _api.fetchBankCreditSummary(bank);
+        if (summary != null) summaries[bank] = summary;
+      }));
       if (mounted) {
         setState(() {
-          _cards = results[0] as List<AppCard>;
+          _cards = cards;
           _transactions = results[1] as List<Transaction>;
+          _bankSummaries = summaries;
           _loading = false;
         });
       }
@@ -152,6 +165,16 @@ class _HomeTabState extends ConsumerState<HomeTab> with WidgetsBindingObserver {
   List<Transaction> _txOf(String key) {
     final now = DateTime.now();
     final cardIds = _cardsForKey(key).map((c) => c.id).toSet();
+    if (key.startsWith('bank_')) {
+      // 信用卡頁面：有設定結帳日的話，抓「這期還沒繳清」的交易（見後端
+      // current_window_start_date 演算法），沒設定就先退回日曆月篩選
+      final windowStart = _bankSummaries[key.substring(5)]?.currentWindowStartDate;
+      return _transactions.where((t) {
+        if (t.cardId == null || !cardIds.contains(t.cardId)) return false;
+        if (windowStart != null) return t.effectiveDate.isAfter(windowStart);
+        return t.effectiveDate.year == now.year && t.effectiveDate.month == now.month;
+      }).toList();
+    }
     return _transactions.where((t) {
       if (t.effectiveDate.year != now.year || t.effectiveDate.month != now.month) {
         return false;
@@ -160,17 +183,6 @@ class _HomeTabState extends ConsumerState<HomeTab> with WidgetsBindingObserver {
       if (key == _kCashType) return t.cardId == null;
       return t.cardId != null && cardIds.contains(t.cardId);
     }).toList();
-  }
-
-  // 單張卡本月的支出總額，用來在銀行合併圓圈裡算「沒填目前應繳金額」的那幾張卡的用量
-  double _expenseForCard(int cardId) {
-    final now = DateTime.now();
-    return _transactions.where((t) =>
-        t.cardId == cardId &&
-        t.effectiveDate.year == now.year &&
-        t.effectiveDate.month == now.month &&
-        t.amount < 0 &&
-        !t.isCodUnpaid).fold(0.0, (s, t) => s + t.amount.abs());
   }
 
   double _expense(String key) => _txOf(key)
@@ -355,41 +367,35 @@ class _HomeTabState extends ConsumerState<HomeTab> with WidgetsBindingObserver {
                                       final showBalance = card != null &&
                                           (card.type == 'debit' ||
                                               card.type == 'easycard');
+                                      // 可用額度／本期應繳都是後端算好的，即時反映「有史
+                                      // 以來消費 − 記錄過的還款」，不受日曆月限制
+                                      final summary =
+                                          isBank && bankCards.isNotEmpty
+                                              ? _bankSummaries[key.substring(5)]
+                                              : null;
+                                      final hasPeriod = summary?.billingDay != null;
                                       final value = showBalance
                                           ? _balance(key)
-                                          : _income(key) - _expense(key);
-                                      double? availableCredit;
-                                      double? creditLimitTotal;
-                                      if (isBank && bankCards.isNotEmpty) {
-                                        final limitSum = bankCards.fold(
-                                            0.0, (s, c) => s + (c.creditLimit ?? 0));
-                                        if (limitSum > 0) {
-                                          final usedSum = bankCards.fold(
-                                              0.0,
-                                              (s, c) =>
-                                                  s +
-                                                  (c.dueAmount ??
-                                                      _expenseForCard(c.id)));
-                                          creditLimitTotal = limitSum;
-                                          availableCredit = limitSum - usedSum;
-                                        }
-                                      } else if (card != null &&
-                                          card.type == 'credit' &&
-                                          card.creditLimit != null) {
-                                        final used =
-                                            card.dueAmount ?? _expense(key);
-                                        creditLimitTotal = card.creditLimit;
-                                        availableCredit =
-                                            card.creditLimit! - used;
-                                      }
+                                          : hasPeriod
+                                              ? summary!.periodDueAmount
+                                              : _income(key) - _expense(key);
+                                      final label = showBalance
+                                          ? '剩餘金額'
+                                          : hasPeriod
+                                              ? '本期應繳（${summary!.billingDay} 號結帳）'
+                                              : '月結餘';
                                       return _RingChart(
                                         net: value,
-                                        label: showBalance ? '剩餘金額' : '月結餘',
+                                        label: label,
                                         color: color,
                                         hasUnpaidCod: hasUnpaidCod,
                                         hasOutstandingLoan: hasLoan,
-                                        creditLimit: creditLimitTotal,
-                                        availableCredit: availableCredit,
+                                        creditLimit: (summary != null && summary.creditLimit > 0)
+                                            ? summary.creditLimit
+                                            : null,
+                                        availableCredit: (summary != null && summary.creditLimit > 0)
+                                            ? summary.availableCredit
+                                            : null,
                                       );
                                     },
                                   ),
@@ -430,6 +436,39 @@ class _HomeTabState extends ConsumerState<HomeTab> with WidgetsBindingObserver {
                               ),
                             ),
                           ),
+
+                        if (currentKey.startsWith('bank_')) ...[
+                          const SizedBox(height: 8),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              TextButton.icon(
+                                onPressed: () => _openRecordPaymentSheet(
+                                    currentKey.substring(5)),
+                                icon: const Icon(Icons.payments_outlined, size: 16),
+                                label: const Text('記錄還款'),
+                                style: TextButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 12, vertical: 4),
+                                  minimumSize: Size.zero,
+                                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                ),
+                              ),
+                              TextButton.icon(
+                                onPressed: () => _openBillingSettingsSheet(
+                                    currentKey.substring(5)),
+                                icon: const Icon(Icons.settings_outlined, size: 16),
+                                label: const Text('結帳設定'),
+                                style: TextButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 12, vertical: 4),
+                                  minimumSize: Size.zero,
+                                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
 
                         const SizedBox(height: 20),
 
@@ -554,6 +593,220 @@ class _HomeTabState extends ConsumerState<HomeTab> with WidgetsBindingObserver {
       _kCashType => const Color(0xFF14B8A6),
       _ => Theme.of(context).colorScheme.primary,
     };
+  }
+
+  // 記錄一筆還款——只記金額+日期，歸戶到這個銀行名稱，讓可用額度往上恢復
+  Future<void> _openRecordPaymentSheet(String bankName) async {
+    final amountCtrl = TextEditingController();
+    var date = DateTime.now();
+    final saved = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      useRootNavigator: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (sheetContext, setLocal) => Container(
+          decoration: BoxDecoration(
+            color: Theme.of(sheetContext).colorScheme.surface,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          padding: EdgeInsets.fromLTRB(20, 20, 20,
+              MediaQuery.of(sheetContext).viewInsets.bottom + 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('記錄還款：$bankName',
+                  style: const TextStyle(
+                      fontSize: 18, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 20),
+              TextField(
+                controller: amountCtrl,
+                autofocus: true,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                decoration: const InputDecoration(
+                  labelText: '還款金額',
+                  prefixText: '\$ ',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 12),
+              InkWell(
+                onTap: () async {
+                  final picked = await showDatePicker(
+                    context: sheetContext,
+                    initialDate: date,
+                    firstDate: DateTime(2020),
+                    lastDate: DateTime.now().add(const Duration(days: 1)),
+                  );
+                  if (picked != null) setLocal(() => date = picked);
+                },
+                child: InputDecorator(
+                  decoration: const InputDecoration(
+                    labelText: '還款日期',
+                    border: OutlineInputBorder(),
+                  ),
+                  child: Text(DateFormat('yyyy-MM-dd').format(date)),
+                ),
+              ),
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  onPressed: () {
+                    final amount = double.tryParse(amountCtrl.text);
+                    if (amount == null || amount <= 0) return;
+                    Navigator.pop(sheetContext, true);
+                  },
+                  child: const Text('儲存'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (saved == true) {
+      final amount = double.tryParse(amountCtrl.text);
+      if (amount != null && amount > 0) {
+        try {
+          await _api.createPayment(
+            bankName: bankName,
+            amount: amount,
+            paymentDate: date,
+          );
+          await _load();
+        } catch (e) {
+          if (mounted) {
+            ScaffoldMessenger.of(context)
+                .showSnackBar(SnackBar(content: Text('記錄還款失敗：$e')));
+          }
+        }
+      }
+    }
+  }
+
+  // 結帳日 + 起始基準點設定：結帳日決定「本期」怎麼切；起始基準點是
+  // 一次性的手動輸入，讓 App 開始追蹤前已經欠的錢也能接上
+  Future<void> _openBillingSettingsSheet(String bankName) async {
+    BankCreditSetting? current;
+    try {
+      current = await _api.fetchBankCreditSetting(bankName);
+    } catch (_) {
+      // 讀不到就當作還沒設定過，讓使用者從空白開始填
+    }
+
+    final billingDayCtrl =
+        TextEditingController(text: current?.billingDay?.toString() ?? '');
+    final balanceCtrl = TextEditingController(
+        text: current?.startingBalance != null
+            ? current!.startingBalance!.toStringAsFixed(0)
+            : '');
+    var balanceDate = current?.startingBalanceDate ?? DateTime.now();
+
+    if (!mounted) return;
+    final saved = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      useRootNavigator: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (sheetContext, setLocal) => Container(
+          decoration: BoxDecoration(
+            color: Theme.of(sheetContext).colorScheme.surface,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          padding: EdgeInsets.fromLTRB(20, 20, 20,
+              MediaQuery.of(sheetContext).viewInsets.bottom + 24),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('結帳設定：$bankName',
+                    style: const TextStyle(
+                        fontSize: 18, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 20),
+                TextField(
+                  controller: billingDayCtrl,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: '結帳日（幾號）',
+                    suffixText: '號',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text('起始基準點（選填，只需要設定一次）',
+                    style: TextStyle(
+                        fontSize: 12,
+                        color: Theme.of(sheetContext).colorScheme.outline)),
+                const SizedBox(height: 4),
+                Text('把「設定當下實際欠銀行多少」填進去，之後才接得上正確的數字',
+                    style: TextStyle(
+                        fontSize: 11,
+                        color: Theme.of(sheetContext).colorScheme.outline)),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: balanceCtrl,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(
+                    labelText: '目前實際欠多少',
+                    prefixText: '\$ ',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                InkWell(
+                  onTap: () async {
+                    final picked = await showDatePicker(
+                      context: sheetContext,
+                      initialDate: balanceDate,
+                      firstDate: DateTime(2020),
+                      lastDate: DateTime.now().add(const Duration(days: 1)),
+                    );
+                    if (picked != null) setLocal(() => balanceDate = picked);
+                  },
+                  child: InputDecorator(
+                    decoration: const InputDecoration(
+                      labelText: '基準日期',
+                      border: OutlineInputBorder(),
+                    ),
+                    child: Text(DateFormat('yyyy-MM-dd').format(balanceDate)),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton(
+                    onPressed: () => Navigator.pop(sheetContext, true),
+                    child: const Text('儲存'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    if (saved == true) {
+      final billingDay = int.tryParse(billingDayCtrl.text.trim());
+      final startingBalance = double.tryParse(balanceCtrl.text.trim());
+      try {
+        await _api.updateBankCreditSetting(
+          bankName,
+          billingDay: billingDay,
+          startingBalance: startingBalance,
+          startingBalanceDate: startingBalance != null ? balanceDate : null,
+        );
+        await _load();
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context)
+              .showSnackBar(SnackBar(content: Text('儲存結帳設定失敗：$e')));
+        }
+      }
+    }
   }
 
   // 長按圓圈圖：讓使用者拖曳調整頁面順序（存在本機，決定想先看哪張卡/現金/全部）

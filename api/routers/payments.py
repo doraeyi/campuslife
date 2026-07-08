@@ -40,6 +40,7 @@ def _to_read(db: Session, p: models.Payment) -> schemas.PaymentRead:
         id=p.id,
         statement_id=p.statement_id,
         from_account_id=p.from_account_id,
+        bank_name=p.bank_name,
         amount=p.amount,
         payment_date=p.payment_date,
         is_late=is_late,
@@ -49,6 +50,7 @@ def _to_read(db: Session, p: models.Payment) -> schemas.PaymentRead:
 @router.get("", response_model=list[schemas.PaymentRead])
 def list_payments(
     statement_id: int | None = Query(None),
+    bank_name: str | None = Query(None),
     unmatched: bool = Query(False),
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -58,6 +60,8 @@ def list_payments(
         q = q.filter(models.Payment.statement_id.is_(None))
     elif statement_id is not None:
         q = q.filter(models.Payment.statement_id == statement_id)
+    if bank_name is not None:
+        q = q.filter(models.Payment.bank_name == bank_name)
     return [_to_read(db, p) for p in q.order_by(models.Payment.payment_date.desc()).all()]
 
 
