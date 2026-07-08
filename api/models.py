@@ -97,6 +97,9 @@ class Card(Base):
     payment_due_date = Column(String(10), nullable=True)
     reminder_day = Column(Integer, nullable=True)
     credit_account_id = Column(Integer, ForeignKey("credit_accounts.id"), nullable=True, index=True)
+    # 信用卡額度分組鍵：預設等於 bank（同銀行自動合併一圈），使用者可以選擇「不
+    # 共用額度」讓某張卡獨立出來，這種情況下會存成 "{bank}#{card 自己的 id}"
+    credit_group_key = Column(String(120), nullable=True, index=True)
     created_at = Column(DateTime, server_default=func.now())
 
     credit_account = relationship("CreditAccount")
@@ -181,7 +184,8 @@ class Statement(Base):
 
 
 class Payment(Base):
-    """還款紀錄，跟 Statement 分開存——可以先繳款，之後才配對到某一期帳單。"""
+    """標記某一期帳單已繳清——金額是後端依帳單期間的交易加總算出來的，
+    不是使用者手動輸入的，period_closing_date 用來對應到哪一期。"""
     __tablename__ = "payments"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -189,6 +193,7 @@ class Payment(Base):
     statement_id = Column(Integer, ForeignKey("statements.id"), nullable=True, index=True)
     from_account_id = Column(Integer, ForeignKey("cards.id"), nullable=True, index=True)
     bank_name = Column(String(100), nullable=True, index=True)  # 對應 Card.bank 這個自由文字欄位，還款不綁定單一張卡
+    period_closing_date = Column(Date, nullable=True, index=True)  # 這筆還款對應哪一期帳單（該期的結帳日）
     amount = Column(Float, nullable=False)
     payment_date = Column(Date, nullable=False)
     created_at = Column(DateTime, server_default=func.now())
@@ -198,21 +203,23 @@ class Payment(Base):
 
 
 class BankCreditSetting(Base):
-    """信用卡結帳週期設定，依銀行名稱歸戶（不是實體 Bank/CreditAccount 資料表）。
-    billing_day：結帳日（幾號），用來把交易切成「本期」跟「下期」。
-    starting_balance / starting_balance_date：起始基準點——因為 App 只看得到
-    使用者開始用這個功能之後的交易，所以需要一個「當下實際欠多少」的起點，
-    之後才能接著正確滾動累計。
+    """信用卡結帳日設定，依額度分組鍵歸戶（通常等於銀行名稱，見 Card.credit_group_key；
+    不是實體 Bank/CreditAccount 資料表）。billing_day 決定怎麼把交易切成一期一期，
+    帳單金額原則上直接加總那期日期範圍內的交易算出來。
+
+    manual_period_amount / manual_period_set_date：選填的手動覆蓋——懶得每筆都記
+    交易的使用者可以直接打一個「目前本期花了多少」進去，之後只有「這之後新記的
+    交易」會再加上去；一旦結帳日換到下一期，這個覆蓋就自動失效，回到正常的加總。
     """
     __tablename__ = "bank_credit_settings"
     __table_args__ = (UniqueConstraint("user_id", "bank_name", name="uq_bank_credit_setting"),)
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
-    bank_name = Column(String(100), nullable=False)
+    bank_name = Column(String(100), nullable=False)  # 其實是額度分組鍵，欄位名稱沿用舊的沒改
     billing_day = Column(Integer, nullable=True)
-    starting_balance = Column(Float, nullable=True)
-    starting_balance_date = Column(Date, nullable=True)
+    manual_period_amount = Column(Float, nullable=True)
+    manual_period_set_date = Column(Date, nullable=True)
     created_at = Column(DateTime, server_default=func.now())
 
 

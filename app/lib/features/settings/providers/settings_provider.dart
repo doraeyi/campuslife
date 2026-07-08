@@ -74,13 +74,17 @@ class CardsNotifier extends AsyncNotifier<List<AppCard>> {
     String? lastFour,
     double? balance,
     double? dueAmount,
+    double? creditLimit,
     String? paymentDueDate,
     int? reminderDay,
+    bool shareCreditWithBank = true,
   }) async {
     final card = await ApiClient().createCard(
       name: name, type: type, color: color,
       bank: bank, lastFour: lastFour, balance: balance,
-      dueAmount: dueAmount, paymentDueDate: paymentDueDate, reminderDay: reminderDay,
+      dueAmount: dueAmount, creditLimit: creditLimit,
+      paymentDueDate: paymentDueDate, reminderDay: reminderDay,
+      shareCreditWithBank: shareCreditWithBank,
     );
     state = state.whenData((list) => [...list, card]);
     return card;
@@ -94,13 +98,17 @@ class CardsNotifier extends AsyncNotifier<List<AppCard>> {
     String? lastFour,
     double? balance,
     double? dueAmount,
+    double? creditLimit,
     String? paymentDueDate,
     int? reminderDay,
+    bool shareCreditWithBank = true,
   }) async {
     final card = await ApiClient().updateCard(
       id, name: name, type: type, color: color,
       bank: bank, lastFour: lastFour, balance: balance,
-      dueAmount: dueAmount, paymentDueDate: paymentDueDate, reminderDay: reminderDay,
+      dueAmount: dueAmount, creditLimit: creditLimit,
+      paymentDueDate: paymentDueDate, reminderDay: reminderDay,
+      shareCreditWithBank: shareCreditWithBank,
     );
     state = state.whenData((list) => list.map((c) => c.id == id ? card : c).toList());
   }

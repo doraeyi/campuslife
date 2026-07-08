@@ -1,23 +1,47 @@
 class BankCreditSetting {
   final String bankName;
   final int? billingDay;
-  final double? startingBalance;
-  final DateTime? startingBalanceDate;
+  final double? manualPeriodAmount;
+  final DateTime? manualPeriodSetDate;
 
   const BankCreditSetting({
     required this.bankName,
     this.billingDay,
-    this.startingBalance,
-    this.startingBalanceDate,
+    this.manualPeriodAmount,
+    this.manualPeriodSetDate,
   });
 
   factory BankCreditSetting.fromJson(Map<String, dynamic> json) => BankCreditSetting(
         bankName: json['bank_name'] as String,
         billingDay: json['billing_day'] as int?,
-        startingBalance: (json['starting_balance'] as num?)?.toDouble(),
-        startingBalanceDate: json['starting_balance_date'] != null
-            ? DateTime.parse(json['starting_balance_date'] as String)
+        manualPeriodAmount: (json['manual_period_amount'] as num?)?.toDouble(),
+        manualPeriodSetDate: json['manual_period_set_date'] != null
+            ? DateTime.parse(json['manual_period_set_date'] as String)
             : null,
+      );
+}
+
+class BankBill {
+  final DateTime closingDate;
+  final DateTime periodStart;
+  final DateTime periodEnd;
+  final double amount;
+  final bool paid;
+
+  const BankBill({
+    required this.closingDate,
+    required this.periodStart,
+    required this.periodEnd,
+    required this.amount,
+    required this.paid,
+  });
+
+  factory BankBill.fromJson(Map<String, dynamic> json) => BankBill(
+        closingDate: DateTime.parse(json['closing_date'] as String),
+        periodStart: DateTime.parse(json['period_start'] as String),
+        periodEnd: DateTime.parse(json['period_end'] as String),
+        amount: (json['amount'] as num).toDouble(),
+        paid: json['paid'] as bool,
       );
 }
 
@@ -26,20 +50,18 @@ class BankCreditSummary {
   final double creditLimit;
   final int? billingDay;
   final DateTime? lastClosingDate;
-  final double periodDueAmount;
-  final double outstandingNow;
+  final double currentPeriodSpend;
   final double availableCredit;
-  final DateTime? currentWindowStartDate;
+  final List<BankBill> unpaidBills;
 
   const BankCreditSummary({
     required this.bankName,
     required this.creditLimit,
     this.billingDay,
     this.lastClosingDate,
-    required this.periodDueAmount,
-    required this.outstandingNow,
+    required this.currentPeriodSpend,
     required this.availableCredit,
-    this.currentWindowStartDate,
+    required this.unpaidBills,
   });
 
   factory BankCreditSummary.fromJson(Map<String, dynamic> json) => BankCreditSummary(
@@ -49,11 +71,10 @@ class BankCreditSummary {
         lastClosingDate: json['last_closing_date'] != null
             ? DateTime.parse(json['last_closing_date'] as String)
             : null,
-        periodDueAmount: (json['period_due_amount'] as num).toDouble(),
-        outstandingNow: (json['outstanding_now'] as num).toDouble(),
+        currentPeriodSpend: (json['current_period_spend'] as num).toDouble(),
         availableCredit: (json['available_credit'] as num).toDouble(),
-        currentWindowStartDate: json['current_window_start_date'] != null
-            ? DateTime.parse(json['current_window_start_date'] as String)
-            : null,
+        unpaidBills: (json['unpaid_bills'] as List<dynamic>? ?? [])
+            .map((b) => BankBill.fromJson(b as Map<String, dynamic>))
+            .toList(),
       );
 }

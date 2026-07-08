@@ -12,7 +12,6 @@ import '../models/friend_shift.dart';
 import '../models/group_shift.dart';
 import '../models/income.dart';
 import '../models/job.dart';
-import '../models/payment.dart';
 import '../models/pending_screenshot.dart';
 import '../models/settings_models.dart';
 import '../models/shift.dart';
@@ -291,6 +290,7 @@ class ApiClient {
     String? paymentDueDate,
     String? passExpiryDate,
     int? reminderDay,
+    bool shareCreditWithBank = true,
   }) async {
     final response = await http.put(
       Uri.parse('$baseUrl/cards/$id'),
@@ -307,6 +307,7 @@ class ApiClient {
         'payment_due_date': paymentDueDate,
         'pass_expiry_date': passExpiryDate,
         'reminder_day': reminderDay,
+        'share_credit_with_bank': shareCreditWithBank,
       }),
     );
     if (response.statusCode != 200) throw Exception('更新卡片失敗');
@@ -325,6 +326,7 @@ class ApiClient {
     String? paymentDueDate,
     String? passExpiryDate,
     int? reminderDay,
+    bool shareCreditWithBank = true,
   }) async {
     final response = await http.post(
       Uri.parse('$baseUrl/cards'),
@@ -341,6 +343,7 @@ class ApiClient {
         'payment_due_date': paymentDueDate,
         'pass_expiry_date': passExpiryDate,
         'reminder_day': reminderDay,
+        'share_credit_with_bank': shareCreditWithBank,
       }),
     );
     if (response.statusCode != 200 && response.statusCode != 201) throw Exception('新增卡片失敗');
@@ -352,40 +355,7 @@ class ApiClient {
     if (response.statusCode != 200) throw Exception('刪除卡片失敗');
   }
 
-  // ── Payments（信用卡還款紀錄，依銀行名稱歸戶，不綁定單一張卡）─────────────
-
-  String _formatDate(DateTime date) =>
-      '${date.year.toString().padLeft(4, '0')}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
-
-  Future<List<Payment>> fetchPayments({String? bankName}) async {
-    final uri = Uri.parse('$baseUrl/payments').replace(
-      queryParameters: bankName != null ? {'bank_name': bankName} : null,
-    );
-    final response = await http.get(uri, headers: await _authHeaders());
-    if (response.statusCode != 200) throw Exception('載入還款紀錄失敗');
-    final List<dynamic> data = jsonDecode(response.body);
-    return data.map((json) => Payment.fromJson(json as Map<String, dynamic>)).toList();
-  }
-
-  Future<Payment> createPayment({
-    required String bankName,
-    required double amount,
-    required DateTime paymentDate,
-  }) async {
-    final response = await http.post(
-      Uri.parse('$baseUrl/payments'),
-      headers: await _authHeaders(),
-      body: jsonEncode({
-        'bank_name': bankName,
-        'amount': amount,
-        'payment_date': _formatDate(paymentDate),
-      }),
-    );
-    if (response.statusCode != 200) throw Exception('記錄還款失敗');
-    return Payment.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
-  }
-
-  // ── Bank Credit Settings（結帳日 + 起始基準點）────────────────────────────
+  // ── Bank Credit Settings（結帳日 + 這期消費／待繳帳單）─────────────────────
 
   Future<BankCreditSetting> fetchBankCreditSetting(String bankName) async {
     final response = await http.get(
@@ -399,17 +369,14 @@ class ApiClient {
   Future<BankCreditSetting> updateBankCreditSetting(
     String bankName, {
     int? billingDay,
-    double? startingBalance,
-    DateTime? startingBalanceDate,
+    double? manualPeriodAmount,
   }) async {
     final response = await http.put(
       Uri.parse('$baseUrl/bank-credit-settings/${Uri.encodeComponent(bankName)}'),
       headers: await _authHeaders(),
       body: jsonEncode({
         'billing_day': billingDay,
-        'starting_balance': startingBalance,
-        'starting_balance_date':
-            startingBalanceDate != null ? _formatDate(startingBalanceDate) : null,
+        'manual_period_amount': manualPeriodAmount,
       }),
     );
     if (response.statusCode != 200) throw Exception('更新結帳設定失敗');
@@ -424,6 +391,17 @@ class ApiClient {
     if (response.statusCode == 404) return null;
     if (response.statusCode != 200) throw Exception('載入信用卡摘要失敗');
     return BankCreditSummary.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+  }
+
+  Future<BankBill> payBankBill(String bankName, DateTime closingDate) async {
+    final closing =
+        '${closingDate.year.toString().padLeft(4, '0')}-${closingDate.month.toString().padLeft(2, '0')}-${closingDate.day.toString().padLeft(2, '0')}';
+    final response = await http.post(
+      Uri.parse('$baseUrl/bank-credit-settings/${Uri.encodeComponent(bankName)}/bills/$closing/pay'),
+      headers: await _authHeaders(),
+    );
+    if (response.statusCode != 200) throw Exception('標記已繳失敗');
+    return BankBill.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
   }
 
   // ── Income ────────────────────────────────────────────────────────────────

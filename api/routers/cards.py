@@ -19,6 +19,12 @@ def _validate_credit_account(db: Session, credit_account_id: int, user_id: int) 
         raise HTTPException(status_code=404, detail="找不到這個信用帳戶")
 
 
+def _compute_group_key(bank: str | None, share: bool, card_id: int) -> str | None:
+    if not bank:
+        return None
+    return bank if share else f"{bank}#{card_id}"
+
+
 @router.get("", response_model=list[schemas.CardRead])
 def list_cards(
     current_user: models.User = Depends(get_current_user),
@@ -35,8 +41,12 @@ def create_card(
 ):
     if payload.credit_account_id is not None:
         _validate_credit_account(db, payload.credit_account_id, current_user.id)
-    card = models.Card(user_id=current_user.id, **payload.model_dump())
+    data = payload.model_dump(exclude={"share_credit_with_bank", "credit_group_key"})
+    card = models.Card(user_id=current_user.id, **data)
     db.add(card)
+    db.commit()
+    db.refresh(card)
+    card.credit_group_key = _compute_group_key(card.bank, payload.share_credit_with_bank, card.id)
     db.commit()
     db.refresh(card)
     return card
@@ -58,8 +68,10 @@ def update_card(
         raise HTTPException(status_code=404, detail="找不到這張卡片")
     if payload.credit_account_id is not None:
         _validate_credit_account(db, payload.credit_account_id, current_user.id)
-    for k, v in payload.model_dump().items():
+    data = payload.model_dump(exclude={"share_credit_with_bank", "credit_group_key"})
+    for k, v in data.items():
         setattr(card, k, v)
+    card.credit_group_key = _compute_group_key(card.bank, payload.share_credit_with_bank, card.id)
     db.commit()
     db.refresh(card)
     return card

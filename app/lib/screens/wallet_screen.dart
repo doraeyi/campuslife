@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../models/bank_credit_summary.dart';
 import '../models/card_model.dart';
 import '../models/transaction.dart';
 import '../services/api_client.dart';
@@ -30,6 +31,7 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
   late final PageController _cardPageController;
   List<AppCard> _cards = [];
   List<Transaction> _transactions = [];
+  Map<String, BankCreditSummary> _bankSummaries = {};
   bool _loading = true;
   int _cardPage = 0;
   late String _scope; // 'all' | 'cash' | 'card_<id>'
@@ -57,11 +59,26 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
     super.dispose();
   }
 
-  // 同一家銀行的信用卡合併範圍時，回傳這些卡片的 id 集合
+  // 這張信用卡「這期」花了多少錢——有結帳日就抓結帳日之後的交易，沒設定就退回日曆月
+  double _cardPeriodSpend(AppCard card) {
+    final groupKey = card.effectiveGroupKey;
+    final lastClosing =
+        groupKey != null ? _bankSummaries[groupKey]?.lastClosingDate : null;
+    final now = DateTime.now();
+    return _transactions
+        .where((t) => t.cardId == card.id && t.amount < 0 && !t.isCodUnpaid)
+        .where((t) => lastClosing != null
+            ? !t.effectiveDate.isBefore(lastClosing)
+            : t.effectiveDate.year == now.year &&
+                t.effectiveDate.month == now.month)
+        .fold(0.0, (s, t) => s + t.amount.abs());
+  }
+
+  // 同一個額度群組（同一家銀行、且沒有關掉共用額度）的信用卡合併範圍時，回傳這些卡片的 id 集合
   Set<int> get _bankCardIds {
-    final bankName = _scope.substring('bank_'.length);
+    final groupKey = _scope.substring('bank_'.length);
     return _cards
-        .where((c) => c.type == 'credit' && c.bank == bankName)
+        .where((c) => c.type == 'credit' && c.effectiveGroupKey == groupKey)
         .map((c) => c.id)
         .toSet();
   }
@@ -85,11 +102,22 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
         _api.fetchCards(),
         _api.fetchTransactions(),
       ]);
+      final cards = results[0] as List<AppCard>;
+      final groupKeys = cards
+          .where((c) =>
+              c.type == 'credit' && (c.effectiveGroupKey?.isNotEmpty ?? false))
+          .map((c) => c.effectiveGroupKey!)
+          .toSet();
+      final summaries = <String, BankCreditSummary>{};
+      await Future.wait(groupKeys.map((key) async {
+        final summary = await _api.fetchBankCreditSummary(key);
+        if (summary != null) summaries[key] = summary;
+      }));
       if (mounted) {
-        final cards = results[0] as List<AppCard>;
         setState(() {
           _cards = cards;
           _transactions = results[1] as List<Transaction>;
+          _bankSummaries = summaries;
           _loading = false;
           if (!_scopeInitialized) {
             _scopeInitialized = true;
@@ -97,9 +125,9 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
             if (_scope.startsWith('card_')) {
               targetId = int.parse(_scope.substring('card_'.length));
             } else if (_scope.startsWith('bank_')) {
-              final bankName = _scope.substring('bank_'.length);
-              final match =
-                  cards.where((c) => c.type == 'credit' && c.bank == bankName);
+              final groupKey = _scope.substring('bank_'.length);
+              final match = cards.where(
+                  (c) => c.type == 'credit' && c.effectiveGroupKey == groupKey);
               if (match.isNotEmpty) targetId = match.first.id;
             }
             if (targetId != null) {
@@ -462,6 +490,7 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
                           }),
                           onUpdateBalance: _showUpdateBalance,
                           onEdit: _showEditCard,
+                          periodSpendOf: _cardPeriodSpend,
                         ),
                 // ── Transaction list ── 獨立捲動，卡片區塊不會跟著跑 ────────
                 Expanded(
@@ -503,6 +532,7 @@ class _CardCarousel extends StatelessWidget {
     required this.onPageChanged,
     required this.onUpdateBalance,
     required this.onEdit,
+    required this.periodSpendOf,
   });
 
   final List<AppCard> cards;
@@ -511,6 +541,7 @@ class _CardCarousel extends StatelessWidget {
   final ValueChanged<int> onPageChanged;
   final ValueChanged<AppCard> onUpdateBalance;
   final ValueChanged<AppCard> onEdit;
+  final double Function(AppCard) periodSpendOf;
 
   @override
   Widget build(BuildContext context) {
@@ -526,6 +557,7 @@ class _CardCarousel extends StatelessWidget {
               card: cards[i],
               onUpdateBalance: () => onUpdateBalance(cards[i]),
               onEdit: () => onEdit(cards[i]),
+              periodSpend: periodSpendOf(cards[i]),
             ),
           ),
         ),
@@ -559,11 +591,13 @@ class _CardTile extends StatelessWidget {
     required this.card,
     required this.onUpdateBalance,
     required this.onEdit,
+    required this.periodSpend,
   });
 
   final AppCard card;
   final VoidCallback onUpdateBalance;
   final VoidCallback onEdit;
+  final double periodSpend;
 
   @override
   Widget build(BuildContext context) {
@@ -642,12 +676,19 @@ class _CardTile extends StatelessWidget {
               ],
             ),
             const Spacer(),
+            if (card.type == 'credit')
+              Text(
+                '本期消費',
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.75),
+                  fontSize: 12,
+                ),
+              ),
+            if (card.type == 'credit') const SizedBox(height: 2),
             Text(
               card.type == 'credit'
-                  ? (card.dueAmount != null
-                      ? NumberFormat.currency(symbol: '\$', decimalDigits: 0)
-                          .format(card.dueAmount)
-                      : '未設定應繳金額')
+                  ? NumberFormat.currency(symbol: '\$', decimalDigits: 0)
+                      .format(periodSpend)
                   : (card.balance != null
                       ? NumberFormat.currency(symbol: '\$', decimalDigits: 0)
                           .format(card.balance)

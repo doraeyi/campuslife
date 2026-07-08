@@ -11,6 +11,7 @@ class AppCard {
   final String? passExpiryDate;
   final String? paymentDueDate;
   final int? reminderDay;
+  final String? creditGroupKey;
 
   const AppCard({
     required this.id,
@@ -25,7 +26,11 @@ class AppCard {
     this.passExpiryDate,
     this.paymentDueDate,
     this.reminderDay,
+    this.creditGroupKey,
   });
+
+  // 沒設定 credit_group_key 的舊卡片，退回用銀行名稱當分組鍵（等同預設共用）
+  String? get effectiveGroupKey => creditGroupKey ?? bank;
 
   factory AppCard.fromJson(Map<String, dynamic> json) => AppCard(
         id: json['id'] as int,
@@ -40,5 +45,6 @@ class AppCard {
         passExpiryDate: json['pass_expiry_date'] as String?,
         paymentDueDate: json['payment_due_date'] as String?,
         reminderDay: json['reminder_day'] as int?,
+        creditGroupKey: json['credit_group_key'] as String?,
       );
 }

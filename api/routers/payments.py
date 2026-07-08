@@ -41,6 +41,7 @@ def _to_read(db: Session, p: models.Payment) -> schemas.PaymentRead:
         statement_id=p.statement_id,
         from_account_id=p.from_account_id,
         bank_name=p.bank_name,
+        period_closing_date=p.period_closing_date,
         amount=p.amount,
         payment_date=p.payment_date,
         is_late=is_late,

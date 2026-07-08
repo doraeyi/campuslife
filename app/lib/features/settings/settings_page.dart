@@ -8,6 +8,8 @@ import 'package:go_router/go_router.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../data/taiwan_banks.dart';
+import '../../models/bank_credit_summary.dart';
 import '../../models/card_model.dart';
 import '../../models/group_shift.dart';
 import '../../models/job.dart';
@@ -42,6 +44,7 @@ class SettingsPage extends HookConsumerWidget {
     final googleExpanded = useState(false);
     final lineExpanded = useState(false);
     final cardExpanded = useState(false);
+    final billingExpanded = useState(false);
     final budgetExpanded = useState(false);
     final jobExpanded = useState(false);
 
@@ -96,6 +99,11 @@ class SettingsPage extends HookConsumerWidget {
                       _CardsAccordion(
                         expanded: cardExpanded.value,
                         onToggle: () => cardExpanded.value = !cardExpanded.value,
+                      ),
+                      const _Divider(),
+                      _BillingAccordion(
+                        expanded: billingExpanded.value,
+                        onToggle: () => billingExpanded.value = !billingExpanded.value,
                       ),
                       const _Divider(),
                       _BudgetAccordion(
@@ -775,6 +783,174 @@ class _CardRow extends ConsumerWidget {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Billing Settings Accordion（結帳日 + 目前需要繳費的金額，依銀行/額度群組設定）
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _BillingAccordion extends ConsumerWidget {
+  const _BillingAccordion({required this.expanded, required this.onToggle});
+  final bool expanded;
+  final VoidCallback onToggle;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final cardsAsync = ref.watch(cardsProvider);
+    final creditCards =
+        (cardsAsync.value ?? []).where((c) => c.type == 'credit').toList();
+    final groups = <String, List<AppCard>>{};
+    for (final c in creditCards) {
+      final key = c.effectiveGroupKey;
+      if (key == null || key.isEmpty) continue;
+      groups.putIfAbsent(key, () => []).add(c);
+    }
+
+    Widget trailing;
+    if (cardsAsync.isLoading) {
+      trailing = const SizedBox(
+          width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2));
+    } else {
+      trailing = Text(
+        groups.isEmpty ? '尚未新增' : '${groups.length} 組',
+        style: const TextStyle(color: _kGrey, fontSize: 13),
+      );
+    }
+
+    return Column(
+      children: [
+        _accordionHeader(
+          leading: const Icon(Icons.event_repeat_rounded, color: Color(0xFF0EA5E9), size: 24),
+          title: '結帳設定',
+          trailing: trailing,
+          expanded: expanded,
+          onToggle: onToggle,
+        ),
+        if (expanded)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            child: groups.isEmpty
+                ? const Text('先新增信用卡並填銀行，才能設定結帳日',
+                    style: TextStyle(color: Color(0xFF9CA3AF), fontSize: 13))
+                : Column(
+                    children: groups.entries
+                        .map((e) => _BillingGroupRow(groupKey: e.key, cards: e.value))
+                        .toList(),
+                  ),
+          ),
+      ],
+    );
+  }
+}
+
+class _BillingGroupRow extends StatelessWidget {
+  const _BillingGroupRow({required this.groupKey, required this.cards});
+  final String groupKey;
+  final List<AppCard> cards;
+
+  String get _label {
+    final bankName = cards.first.bank ?? groupKey;
+    return cards.length > 1 ? '$bankName（共用，${cards.length} 張）' : bankName;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      dense: true,
+      contentPadding: EdgeInsets.zero,
+      leading: const Icon(Icons.account_balance_outlined, size: 20, color: _kGrey),
+      title: Text(_label, style: const TextStyle(fontSize: 14)),
+      trailing: const Icon(Icons.chevron_right_rounded, size: 18, color: _kGrey),
+      onTap: () => _openBillingSettingsSheet(context, groupKey, _label),
+    );
+  }
+}
+
+// 結帳日 + 手動覆蓋金額設定：懶得每筆記帳的話可以直接填這期目前欠多少，
+// 之後新增的交易會加上去；下次結帳日一到就自動歸零
+Future<void> _openBillingSettingsSheet(
+    BuildContext context, String groupKey, String label) async {
+  BankCreditSetting? current;
+  try {
+    current = await ApiClient().fetchBankCreditSetting(groupKey);
+  } catch (_) {
+    // 讀不到就當作還沒設定過，讓使用者從空白開始填
+  }
+
+  final billingDayCtrl =
+      TextEditingController(text: current?.billingDay?.toString() ?? '');
+  final manualAmountCtrl = TextEditingController(
+      text: current?.manualPeriodAmount != null
+          ? current!.manualPeriodAmount!.toStringAsFixed(0)
+          : '');
+
+  if (!context.mounted) return;
+  final saved = await showModalBottomSheet<bool>(
+    context: context,
+    isScrollControlled: true,
+    useRootNavigator: true,
+    backgroundColor: Colors.transparent,
+    builder: (sheetContext) => Container(
+      decoration: BoxDecoration(
+        color: Theme.of(sheetContext).colorScheme.surface,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      padding: EdgeInsets.fromLTRB(
+          20, 20, 20, MediaQuery.of(sheetContext).viewInsets.bottom + 24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('結帳設定：$label',
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 20),
+          TextField(
+            controller: billingDayCtrl,
+            autofocus: true,
+            keyboardType: TextInputType.number,
+            decoration: const InputDecoration(
+              labelText: '結帳日（幾號）',
+              suffixText: '號',
+              border: OutlineInputBorder(),
+            ),
+          ),
+          const SizedBox(height: 16),
+          TextField(
+            controller: manualAmountCtrl,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: const InputDecoration(
+              labelText: '目前需要繳費的金額（選填）',
+              helperText: '懶得每筆記帳的話可以直接填這期目前欠多少，之後新增的交易會加上去；下次結帳日一到就自動歸零',
+              helperMaxLines: 3,
+              prefixText: '\$ ',
+              border: OutlineInputBorder(),
+            ),
+          ),
+          const SizedBox(height: 20),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton(
+              onPressed: () => Navigator.pop(sheetContext, true),
+              child: const Text('儲存'),
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+  if (saved == true) {
+    final billingDay = int.tryParse(billingDayCtrl.text.trim());
+    final manualAmount = double.tryParse(manualAmountCtrl.text.trim());
+    try {
+      await ApiClient().updateBankCreditSetting(groupKey,
+          billingDay: billingDay, manualPeriodAmount: manualAmount);
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('儲存結帳設定失敗：$e')));
+      }
+    }
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Budget Accordion
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -1218,6 +1394,72 @@ Future<void> showCardFormSheet(BuildContext context, {AppCard? card}) async {
   );
 }
 
+Future<void> _pickTaiwanBank(
+    BuildContext context, TextEditingController bankCtrl) async {
+  final searchCtrl = TextEditingController();
+  final selected = await showModalBottomSheet<TaiwanBank>(
+    context: context,
+    isScrollControlled: true,
+    useRootNavigator: true,
+    builder: (ctx) => StatefulBuilder(
+      builder: (ctx, setState) {
+        final query = searchCtrl.text.trim();
+        final results = query.isEmpty
+            ? taiwanBanks
+            : taiwanBanks
+                .where((b) => b.name.contains(query) || b.code.contains(query))
+                .toList();
+        return SafeArea(
+          child: Padding(
+            padding: EdgeInsets.only(
+                bottom: MediaQuery.of(ctx).viewInsets.bottom),
+            child: SizedBox(
+              height: MediaQuery.of(ctx).size.height * 0.7,
+              child: Column(
+                children: [
+                  const SizedBox(height: 12),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: TextField(
+                      controller: searchCtrl,
+                      autofocus: true,
+                      decoration: const InputDecoration(
+                        labelText: '搜尋銀行名稱或代碼',
+                        prefixIcon: Icon(Icons.search),
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                      ),
+                      onChanged: (_) => setState(() {}),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Expanded(
+                    child: ListView.builder(
+                      itemCount: results.length,
+                      itemBuilder: (ctx, i) {
+                        final b = results[i];
+                        return ListTile(
+                          title: Text(b.name),
+                          trailing: Text(b.code,
+                              style: const TextStyle(color: Colors.grey)),
+                          onTap: () => Navigator.of(ctx).pop(b),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    ),
+  );
+  if (selected != null) {
+    bankCtrl.text = selected.name;
+  }
+}
+
 class _CardFormSheet extends HookConsumerWidget {
   const _CardFormSheet({this.card});
   final AppCard? card;
@@ -1244,11 +1486,16 @@ class _CardFormSheet extends HookConsumerWidget {
         text: card?.balance != null ? card!.balance!.toStringAsFixed(0) : '');
     final dueAmountCtrl = useTextEditingController(
         text: card?.dueAmount != null ? card!.dueAmount!.toStringAsFixed(0) : '');
+    final creditLimitCtrl = useTextEditingController(
+        text: card?.creditLimit != null ? card!.creditLimit!.toStringAsFixed(0) : '');
     final paymentDueDateCtrl = useTextEditingController(text: card?.paymentDueDate ?? '');
     final reminderDayCtrl =
         useTextEditingController(text: card?.reminderDay?.toString() ?? '');
     final type = useState(card?.type ?? 'credit');
     final color = useState(card?.color ?? '#6366F1');
+    // 編輯時，如果分組鍵跟銀行名稱不同，代表當初選了「不共用額度」
+    final shareCreditWithBank =
+        useState(card == null || card!.effectiveGroupKey == null || card!.effectiveGroupKey == card!.bank);
     final saving = useState(false);
     final formKey = useMemoized(GlobalKey<FormState>.new);
 
@@ -1257,12 +1504,22 @@ class _CardFormSheet extends HookConsumerWidget {
     final isCredit = type.value == 'credit';
     final showBalance = type.value == 'debit' || type.value == 'easycard';
 
+    // 其他已經存在的信用卡（編輯時排除自己），用來判斷「這家銀行是不是已經有別張卡」
+    useListenable(bankCtrl);
+    final otherCreditCards = ref.watch(cardsProvider).value?.where((c) =>
+        c.type == 'credit' && c.id != card?.id).toList() ?? [];
+    final matchingSiblings = bankCtrl.text.trim().isEmpty
+        ? const <AppCard>[]
+        : otherCreditCards.where((c) => c.bank == bankCtrl.text.trim()).toList();
+    final siblingCard = matchingSiblings.isEmpty ? null : matchingSiblings.first;
+
     Future<void> save() async {
       if (!(formKey.currentState?.validate() ?? false)) return;
       saving.value = true;
       try {
         final balance = showBalance ? double.tryParse(balanceCtrl.text) : null;
         final dueAmount = isCredit ? double.tryParse(dueAmountCtrl.text) : null;
+        final creditLimit = isCredit ? double.tryParse(creditLimitCtrl.text) : null;
         final paymentDueDate = isCredit && paymentDueDateCtrl.text.trim().isNotEmpty
             ? paymentDueDateCtrl.text.trim()
             : null;
@@ -1271,17 +1528,22 @@ class _CardFormSheet extends HookConsumerWidget {
             ? null
             : (bankCtrl.text.trim().isEmpty ? null : bankCtrl.text.trim());
         final lastFour = lastFourCtrl.text.trim();
+        final shareCredit = isCredit ? shareCreditWithBank.value : true;
         if (card == null) {
           await ref.read(cardsProvider.notifier).addCard(
             name: nameCtrl.text.trim(), type: type.value, color: color.value,
             bank: bank, lastFour: lastFour, balance: balance,
-            dueAmount: dueAmount, paymentDueDate: paymentDueDate, reminderDay: reminderDay,
+            dueAmount: dueAmount, creditLimit: creditLimit,
+            paymentDueDate: paymentDueDate, reminderDay: reminderDay,
+            shareCreditWithBank: shareCredit,
           );
         } else {
           await ref.read(cardsProvider.notifier).updateCard(
             card!.id, name: nameCtrl.text.trim(), type: type.value, color: color.value,
             bank: bank, lastFour: lastFour, balance: balance,
-            dueAmount: dueAmount, paymentDueDate: paymentDueDate, reminderDay: reminderDay,
+            dueAmount: dueAmount, creditLimit: creditLimit,
+            paymentDueDate: paymentDueDate, reminderDay: reminderDay,
+            shareCreditWithBank: shareCredit,
           );
         }
         if (context.mounted) Navigator.pop(context);
@@ -1396,15 +1658,35 @@ class _CardFormSheet extends HookConsumerWidget {
               if (!isEasycard) ...[
                 TextFormField(
                   controller: bankCtrl,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     labelText: '銀行 *',
-                    border: OutlineInputBorder(),
+                    border: const OutlineInputBorder(),
                     isDense: true,
+                    suffixIcon: IconButton(
+                      icon: const Icon(Icons.list_alt_outlined, size: 20),
+                      tooltip: '從清單選',
+                      onPressed: () => _pickTaiwanBank(context, bankCtrl),
+                    ),
                   ),
                   validator: (v) =>
                       v == null || v.trim().isEmpty ? '請輸入銀行' : null,
                 ),
                 const SizedBox(height: 12),
+              ],
+
+              // 共用額度——同一家銀行已經有別張信用卡時才問
+              if (isCredit && siblingCard != null) ...[
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                  title: const Text('與這家銀行的其他卡共用額度',
+                      style: TextStyle(fontSize: 13)),
+                  subtitle: Text('跟「${siblingCard.name}」共用一個額度圈圈',
+                      style: TextStyle(fontSize: 11, color: Theme.of(context).colorScheme.outline)),
+                  value: shareCreditWithBank.value,
+                  onChanged: (v) => shareCreditWithBank.value = v,
+                ),
+                const SizedBox(height: 8),
               ],
 
               if (showBalance) ...[
@@ -1422,6 +1704,17 @@ class _CardFormSheet extends HookConsumerWidget {
               ],
 
               if (isCredit) ...[
+                TextFormField(
+                  controller: creditLimitCtrl,
+                  decoration: const InputDecoration(
+                    labelText: '信用額度（選填）',
+                    prefixText: '\$ ',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                ),
+                const SizedBox(height: 12),
                 TextFormField(
                   controller: dueAmountCtrl,
                   decoration: const InputDecoration(
