@@ -827,8 +827,8 @@ class _SalaryCardState extends State<_SalaryCard> {
       final foundTransaction = transactions.any((t) =>
           t.jobId == widget.selectedJob.id &&
           t.transactionType == 'income' &&
-          t.createdAt.year == widget.month.year &&
-          t.createdAt.month == widget.month.month);
+          t.effectiveDate.year == widget.month.year &&
+          t.effectiveDate.month == widget.month.month);
       if (mounted) {
         setState(() => _alreadyRecorded = foundIncome || foundTransaction);
       }

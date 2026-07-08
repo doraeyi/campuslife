@@ -82,11 +82,7 @@ class _HomeTabState extends ConsumerState<HomeTab> with WidgetsBindingObserver {
   }
 
   Future<void> _savePageOrder(List<String> order) async {
-    final available = <String>{
-      _kAllKey,
-      _kCashType,
-      ..._cards.map((c) => 'card_${c.id}'),
-    };
+    final available = _availableKeys.toSet();
     final pruned = order.where(available.contains).toList();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setStringList('home_ring_page_order', pruned);
@@ -97,7 +93,7 @@ class _HomeTabState extends ConsumerState<HomeTab> with WidgetsBindingObserver {
     if (_pageController.hasClients) _pageController.jumpToPage(0);
   }
 
-  // key 是 'card_<id>' 時解析出對應卡片，其餘（'all'/'cash'）回傳 null
+  // key 是 'card_<id>' 時解析出對應卡片，其餘（'all'/'cash'/'bank_<name>'）回傳 null
   AppCard? _cardForKey(String key) {
     if (!key.startsWith('card_')) return null;
     final id = int.tryParse(key.substring(5));
@@ -108,14 +104,35 @@ class _HomeTabState extends ConsumerState<HomeTab> with WidgetsBindingObserver {
     return null;
   }
 
-  // 頁面列表：「全部」「現金」+ 每張卡各自一頁，
-  // 使用者長按圓圈圖可以自訂順序（存在本機，新出現的卡片會排在最後面）
-  List<String> get _pageKeys {
-    final available = <String>[
+  // key 是 'bank_<name>' 時，回傳同一家銀行底下所有信用卡（合併顯示用）；
+  // 'card_<id>' 回傳單一卡片；'all'/'cash' 回傳空清單
+  List<AppCard> _cardsForKey(String key) {
+    if (key.startsWith('bank_')) {
+      final bankName = key.substring(5);
+      return _cards.where((c) => c.type == 'credit' && c.bank == bankName).toList();
+    }
+    final c = _cardForKey(key);
+    return c == null ? const [] : [c];
+  }
+
+  // 「全部」「現金」+ 同一家銀行的信用卡合併成一頁 + 其他卡片（現金卡/悠遊卡）各自一頁
+  List<String> get _availableKeys {
+    final creditBankNames = _cards
+        .where((c) => c.type == 'credit' && (c.bank?.isNotEmpty ?? false))
+        .map((c) => c.bank!)
+        .toSet();
+    final nonCreditCards = _cards.where((c) => c.type != 'credit');
+    return <String>[
       _kAllKey,
       _kCashType,
-      ..._cards.map((c) => 'card_${c.id}'),
+      ...creditBankNames.map((b) => 'bank_$b'),
+      ...nonCreditCards.map((c) => 'card_${c.id}'),
     ];
+  }
+
+  // 頁面順序：使用者長按圓圈圖可以自訂順序（存在本機，新出現的卡片/銀行會排在最後面）
+  List<String> get _pageKeys {
+    final available = _availableKeys;
     final ordered = <String>[];
     for (final key in _pageOrder) {
       if (available.contains(key) && !ordered.contains(key)) ordered.add(key);
@@ -129,21 +146,31 @@ class _HomeTabState extends ConsumerState<HomeTab> with WidgetsBindingObserver {
   List<AppCard> _cardsOf(String key) {
     if (key == _kAllKey) return _cards;
     if (key == _kCashType) return const [];
-    final c = _cardForKey(key);
-    return c == null ? const [] : [c];
+    return _cardsForKey(key);
   }
 
   List<Transaction> _txOf(String key) {
     final now = DateTime.now();
-    final cardId = _cardForKey(key)?.id;
+    final cardIds = _cardsForKey(key).map((c) => c.id).toSet();
     return _transactions.where((t) {
-      if (t.createdAt.year != now.year || t.createdAt.month != now.month) {
+      if (t.effectiveDate.year != now.year || t.effectiveDate.month != now.month) {
         return false;
       }
       if (key == _kAllKey) return true;
       if (key == _kCashType) return t.cardId == null;
-      return cardId != null && t.cardId == cardId;
+      return t.cardId != null && cardIds.contains(t.cardId);
     }).toList();
+  }
+
+  // 單張卡本月的支出總額，用來在銀行合併圓圈裡算「沒填目前應繳金額」的那幾張卡的用量
+  double _expenseForCard(int cardId) {
+    final now = DateTime.now();
+    return _transactions.where((t) =>
+        t.cardId == cardId &&
+        t.effectiveDate.year == now.year &&
+        t.effectiveDate.month == now.month &&
+        t.amount < 0 &&
+        !t.isCodUnpaid).fold(0.0, (s, t) => s + t.amount.abs());
   }
 
   double _expense(String key) => _txOf(key)
@@ -159,12 +186,12 @@ class _HomeTabState extends ConsumerState<HomeTab> with WidgetsBindingObserver {
 
   // 是否有貨到付款尚未付款的紀錄（不限本月，付清前持續提醒）
   bool _hasUnpaidCod(String key) {
-    final cardId = _cardForKey(key)?.id;
+    final cardIds = _cardsForKey(key).map((c) => c.id).toSet();
     return _transactions.any((t) {
       if (!t.isCodUnpaid) return false;
       if (key == _kAllKey) return true;
       if (key == _kCashType) return t.cardId == null;
-      return cardId != null && t.cardId == cardId;
+      return t.cardId != null && cardIds.contains(t.cardId);
     });
   }
 
@@ -285,11 +312,13 @@ class _HomeTabState extends ConsumerState<HomeTab> with WidgetsBindingObserver {
                         // ── 圓圈 + PageView（點下去看該頁的紀錄，長按調順序）──
                         GestureDetector(
                           onTap: () {
-                            final card = _cardForKey(currentKey);
+                            final isBank = currentKey.startsWith('bank_');
+                            final card = isBank ? null : _cardForKey(currentKey);
                             context.push(
                               '/wallet',
                               extra: WalletFilter(
                                 cardId: card?.id,
+                                bankName: isBank ? currentKey.substring(5) : null,
                                 cashOnly: currentKey == _kCashType,
                               ),
                             );
@@ -311,7 +340,10 @@ class _HomeTabState extends ConsumerState<HomeTab> with WidgetsBindingObserver {
                                         setState(() => _page = i),
                                     itemBuilder: (_, i) {
                                       final key = pages[i];
-                                      final card = _cardForKey(key);
+                                      final isBank = key.startsWith('bank_');
+                                      final card = isBank ? null : _cardForKey(key);
+                                      final bankCards =
+                                          isBank ? _cardsForKey(key) : const <AppCard>[];
                                       final hasUnpaidCod = _hasUnpaidCod(key);
                                       final hasLoan =
                                           key == _kAllKey && _hasOutstandingLoan;
@@ -327,11 +359,26 @@ class _HomeTabState extends ConsumerState<HomeTab> with WidgetsBindingObserver {
                                           ? _balance(key)
                                           : _income(key) - _expense(key);
                                       double? availableCredit;
-                                      if (card != null &&
+                                      double? creditLimitTotal;
+                                      if (isBank && bankCards.isNotEmpty) {
+                                        final limitSum = bankCards.fold(
+                                            0.0, (s, c) => s + (c.creditLimit ?? 0));
+                                        if (limitSum > 0) {
+                                          final usedSum = bankCards.fold(
+                                              0.0,
+                                              (s, c) =>
+                                                  s +
+                                                  (c.dueAmount ??
+                                                      _expenseForCard(c.id)));
+                                          creditLimitTotal = limitSum;
+                                          availableCredit = limitSum - usedSum;
+                                        }
+                                      } else if (card != null &&
                                           card.type == 'credit' &&
                                           card.creditLimit != null) {
                                         final used =
                                             card.dueAmount ?? _expense(key);
+                                        creditLimitTotal = card.creditLimit;
                                         availableCredit =
                                             card.creditLimit! - used;
                                       }
@@ -341,7 +388,7 @@ class _HomeTabState extends ConsumerState<HomeTab> with WidgetsBindingObserver {
                                         color: color,
                                         hasUnpaidCod: hasUnpaidCod,
                                         hasOutstandingLoan: hasLoan,
-                                        creditLimit: card?.creditLimit,
+                                        creditLimit: creditLimitTotal,
                                         availableCredit: availableCredit,
                                       );
                                     },
@@ -484,6 +531,7 @@ class _HomeTabState extends ConsumerState<HomeTab> with WidgetsBindingObserver {
 
   String _typeLabel(String key) {
     if (key == _kCashType) return '💵 現金';
+    if (key.startsWith('bank_')) return '💳 ${key.substring(5)}';
     final card = _cardForKey(key);
     if (card == null) return '🗂 全部';
     final emoji = switch (card.type) {
@@ -496,6 +544,10 @@ class _HomeTabState extends ConsumerState<HomeTab> with WidgetsBindingObserver {
   }
 
   Color _typeColor(String key, BuildContext context) {
+    if (key.startsWith('bank_')) {
+      final cards = _cardsForKey(key);
+      if (cards.isNotEmpty) return _hexColor(cards.first.color);
+    }
     final card = _cardForKey(key);
     if (card != null) return _hexColor(card.color);
     return switch (key) {

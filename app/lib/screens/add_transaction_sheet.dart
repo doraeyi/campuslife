@@ -183,6 +183,7 @@ class _AddTransactionSheetState extends State<AddTransactionSheet> {
         isCod: _isCod,
         isLoan: _isLoan,
         loanPerson: _isLoan ? _loanPerson : null,
+        date: DateFormat('yyyy-MM-dd').format(_date),
       );
       if (mounted) Navigator.pop(context, true);
     } catch (_) {

@@ -2,12 +2,9 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../../../models/bank.dart';
 import '../../../models/card_model.dart';
-import '../../../models/credit_account.dart';
 import '../../../models/job.dart';
 import '../../../models/settings_models.dart';
-import '../../../models/statement.dart';
 import '../../../services/api_client.dart';
 
 // ── UserProfile Provider ──────────────────────────────────────────────────
@@ -79,13 +76,11 @@ class CardsNotifier extends AsyncNotifier<List<AppCard>> {
     double? dueAmount,
     String? paymentDueDate,
     int? reminderDay,
-    int? creditAccountId,
   }) async {
     final card = await ApiClient().createCard(
       name: name, type: type, color: color,
       bank: bank, lastFour: lastFour, balance: balance,
       dueAmount: dueAmount, paymentDueDate: paymentDueDate, reminderDay: reminderDay,
-      creditAccountId: creditAccountId,
     );
     state = state.whenData((list) => [...list, card]);
     return card;
@@ -101,13 +96,11 @@ class CardsNotifier extends AsyncNotifier<List<AppCard>> {
     double? dueAmount,
     String? paymentDueDate,
     int? reminderDay,
-    int? creditAccountId,
   }) async {
     final card = await ApiClient().updateCard(
       id, name: name, type: type, color: color,
       bank: bank, lastFour: lastFour, balance: balance,
       dueAmount: dueAmount, paymentDueDate: paymentDueDate, reminderDay: reminderDay,
-      creditAccountId: creditAccountId,
     );
     state = state.whenData((list) => list.map((c) => c.id == id ? card : c).toList());
   }
@@ -186,89 +179,6 @@ class SettingsJobsNotifier extends AsyncNotifier<List<Job>> {
 
 final settingsJobsProvider = AsyncNotifierProvider<SettingsJobsNotifier, List<Job>>(
   SettingsJobsNotifier.new,
-);
-
-// ── Banks Provider ────────────────────────────────────────────────────────
-
-class BanksNotifier extends AsyncNotifier<List<Bank>> {
-  @override
-  Future<List<Bank>> build() => ApiClient().fetchBanks();
-
-  Future<Bank> addBank({required String name}) async {
-    final bank = await ApiClient().createBank(name: name);
-    state = state.whenData((list) => [...list, bank]);
-    return bank;
-  }
-
-  Future<void> updateBank(int id, {required String name}) async {
-    final bank = await ApiClient().updateBank(id, name: name);
-    state = state.whenData((list) => list.map((b) => b.id == id ? bank : b).toList());
-  }
-
-  Future<void> deleteBank(int id) async {
-    await ApiClient().deleteBank(id);
-    state = state.whenData((list) => list.where((b) => b.id != id).toList());
-  }
-}
-
-final banksProvider = AsyncNotifierProvider<BanksNotifier, List<Bank>>(
-  BanksNotifier.new,
-);
-
-// ── Credit Accounts Provider ─────────────────────────────────────────────
-
-class CreditAccountsNotifier extends AsyncNotifier<List<CreditAccount>> {
-  @override
-  Future<List<CreditAccount>> build() => ApiClient().fetchCreditAccounts();
-
-  Future<CreditAccount> addCreditAccount({
-    required int bankId,
-    required String name,
-    required double creditLimit,
-    int? billingDay,
-    int? dueDay,
-  }) async {
-    final account = await ApiClient().createCreditAccount(
-      bankId: bankId, name: name, creditLimit: creditLimit,
-      billingDay: billingDay, dueDay: dueDay,
-    );
-    state = state.whenData((list) => [...list, account]);
-    return account;
-  }
-
-  Future<void> updateCreditAccount(
-    int id, {
-    required int bankId,
-    required String name,
-    required double creditLimit,
-    int? billingDay,
-    int? dueDay,
-  }) async {
-    final account = await ApiClient().updateCreditAccount(
-      id, bankId: bankId, name: name, creditLimit: creditLimit,
-      billingDay: billingDay, dueDay: dueDay,
-    );
-    state = state.whenData((list) => list.map((a) => a.id == id ? account : a).toList());
-  }
-
-  Future<void> deleteCreditAccount(int id) async {
-    await ApiClient().deleteCreditAccount(id);
-    state = state.whenData((list) => list.where((a) => a.id != id).toList());
-  }
-}
-
-final creditAccountsProvider = AsyncNotifierProvider<CreditAccountsNotifier, List<CreditAccount>>(
-  CreditAccountsNotifier.new,
-);
-
-// ── Statements / Available Credit Providers ──────────────────────────────
-
-final statementsProvider = FutureProvider.family<List<Statement>, int>(
-  (ref, accountId) => ApiClient().fetchStatements(creditAccountId: accountId),
-);
-
-final creditAccountAvailableProvider = FutureProvider.family<CreditAccountAvailable, int>(
-  (ref, accountId) => ApiClient().fetchAvailableCredit(accountId),
 );
 
 // ── Budget Provider ───────────────────────────────────────────────────────

@@ -11,8 +11,9 @@ import 'edit_transaction_sheet.dart';
 
 // 用來從其他頁面（例如首頁圓環）帶著目前範圍跳轉過來，決定一開始要看哪個範圍的紀錄
 class WalletFilter {
-  const WalletFilter({this.cardId, this.cashOnly = false});
+  const WalletFilter({this.cardId, this.bankName, this.cashOnly = false});
   final int? cardId;
+  final String? bankName; // 設定時代表「同一家銀行的信用卡」合併範圍
   final bool cashOnly;
 }
 
@@ -40,6 +41,8 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
     _cardPageController = PageController(viewportFraction: 0.88);
     if (widget.filter?.cashOnly == true) {
       _scope = 'cash';
+    } else if (widget.filter?.bankName != null) {
+      _scope = 'bank_${widget.filter!.bankName}';
     } else if (widget.filter?.cardId != null) {
       _scope = 'card_${widget.filter!.cardId}';
     } else {
@@ -54,10 +57,23 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
     super.dispose();
   }
 
+  // 同一家銀行的信用卡合併範圍時，回傳這些卡片的 id 集合
+  Set<int> get _bankCardIds {
+    final bankName = _scope.substring('bank_'.length);
+    return _cards
+        .where((c) => c.type == 'credit' && c.bank == bankName)
+        .map((c) => c.id)
+        .toSet();
+  }
+
   List<Transaction> get _visibleTransactions {
     if (_scope == 'all') return _transactions;
     if (_scope == 'cash') {
       return _transactions.where((t) => t.cardId == null).toList();
+    }
+    if (_scope.startsWith('bank_')) {
+      final ids = _bankCardIds;
+      return _transactions.where((t) => t.cardId != null && ids.contains(t.cardId)).toList();
     }
     final id = int.tryParse(_scope.substring('card_'.length));
     return _transactions.where((t) => t.cardId == id).toList();
@@ -77,9 +93,17 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
           _loading = false;
           if (!_scopeInitialized) {
             _scopeInitialized = true;
+            int? targetId;
             if (_scope.startsWith('card_')) {
-              final id = int.parse(_scope.substring('card_'.length));
-              final index = cards.indexWhere((c) => c.id == id);
+              targetId = int.parse(_scope.substring('card_'.length));
+            } else if (_scope.startsWith('bank_')) {
+              final bankName = _scope.substring('bank_'.length);
+              final match =
+                  cards.where((c) => c.type == 'credit' && c.bank == bankName);
+              if (match.isNotEmpty) targetId = match.first.id;
+            }
+            if (targetId != null) {
+              final index = cards.indexWhere((c) => c.id == targetId);
               if (index >= 0) {
                 _cardPage = index;
                 WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -370,6 +394,7 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
   String _scopeLabel() {
     if (_scope == 'all') return '全部';
     if (_scope == 'cash') return '💵 現金';
+    if (_scope.startsWith('bank_')) return '💳 ${_scope.substring('bank_'.length)}';
     final id = int.tryParse(_scope.substring('card_'.length));
     final match = _cards.where((c) => c.id == id);
     return match.isEmpty ? '全部' : match.first.name;
@@ -676,7 +701,7 @@ class _TransactionSliver extends StatelessWidget {
     // Group by date label
     final groups = <String, List<Transaction>>{};
     for (final tx in transactions) {
-      final key = _dateLabel(tx.createdAt);
+      final key = _dateLabel(tx.effectiveDate);
       (groups[key] ??= []).add(tx);
     }
     final keys = groups.keys.toList();

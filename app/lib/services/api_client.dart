@@ -5,9 +5,7 @@ import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../models/bank.dart';
 import '../models/card_model.dart';
-import '../models/credit_account.dart';
 import '../models/einvoice.dart';
 import '../models/friend_shift.dart';
 import '../models/group_shift.dart';
@@ -16,7 +14,6 @@ import '../models/job.dart';
 import '../models/pending_screenshot.dart';
 import '../models/settings_models.dart';
 import '../models/shift.dart';
-import '../models/statement.dart';
 import '../models/transaction.dart';
 import '../models/user.dart';
 
@@ -292,7 +289,6 @@ class ApiClient {
     String? paymentDueDate,
     String? passExpiryDate,
     int? reminderDay,
-    int? creditAccountId,
   }) async {
     final response = await http.put(
       Uri.parse('$baseUrl/cards/$id'),
@@ -309,7 +305,6 @@ class ApiClient {
         'payment_due_date': paymentDueDate,
         'pass_expiry_date': passExpiryDate,
         'reminder_day': reminderDay,
-        'credit_account_id': creditAccountId,
       }),
     );
     if (response.statusCode != 200) throw Exception('更新卡片失敗');
@@ -328,7 +323,6 @@ class ApiClient {
     String? paymentDueDate,
     String? passExpiryDate,
     int? reminderDay,
-    int? creditAccountId,
   }) async {
     final response = await http.post(
       Uri.parse('$baseUrl/cards'),
@@ -345,7 +339,6 @@ class ApiClient {
         'payment_due_date': paymentDueDate,
         'pass_expiry_date': passExpiryDate,
         'reminder_day': reminderDay,
-        'credit_account_id': creditAccountId,
       }),
     );
     if (response.statusCode != 200 && response.statusCode != 201) throw Exception('新增卡片失敗');
@@ -355,182 +348,6 @@ class ApiClient {
   Future<void> deleteCard(int cardId) async {
     final response = await http.delete(Uri.parse('$baseUrl/cards/$cardId'), headers: await _authHeaders());
     if (response.statusCode != 200) throw Exception('刪除卡片失敗');
-  }
-
-  // ── Banks ─────────────────────────────────────────────────────────────────
-
-  Future<List<Bank>> fetchBanks() async {
-    final response = await http.get(Uri.parse('$baseUrl/banks'), headers: await _authHeaders());
-    if (response.statusCode != 200) throw Exception('載入銀行失敗');
-    final List<dynamic> data = jsonDecode(response.body);
-    return data.map((json) => Bank.fromJson(json as Map<String, dynamic>)).toList();
-  }
-
-  Future<Bank> createBank({required String name}) async {
-    final response = await http.post(
-      Uri.parse('$baseUrl/banks'),
-      headers: await _authHeaders(),
-      body: jsonEncode({'name': name}),
-    );
-    if (response.statusCode != 200) throw Exception('新增銀行失敗');
-    return Bank.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
-  }
-
-  Future<Bank> updateBank(int id, {required String name}) async {
-    final response = await http.put(
-      Uri.parse('$baseUrl/banks/$id'),
-      headers: await _authHeaders(),
-      body: jsonEncode({'name': name}),
-    );
-    if (response.statusCode != 200) throw Exception('更新銀行失敗');
-    return Bank.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
-  }
-
-  Future<void> deleteBank(int id) async {
-    final response = await http.delete(Uri.parse('$baseUrl/banks/$id'), headers: await _authHeaders());
-    if (response.statusCode != 200) throw Exception('刪除銀行失敗');
-  }
-
-  // ── Credit Accounts ──────────────────────────────────────────────────────
-
-  Future<List<CreditAccount>> fetchCreditAccounts() async {
-    final response = await http.get(Uri.parse('$baseUrl/credit-accounts'), headers: await _authHeaders());
-    if (response.statusCode != 200) throw Exception('載入信用額度失敗');
-    final List<dynamic> data = jsonDecode(response.body);
-    return data.map((json) => CreditAccount.fromJson(json as Map<String, dynamic>)).toList();
-  }
-
-  Future<CreditAccount> createCreditAccount({
-    required int bankId,
-    required String name,
-    required double creditLimit,
-    int? billingDay,
-    int? dueDay,
-  }) async {
-    final response = await http.post(
-      Uri.parse('$baseUrl/credit-accounts'),
-      headers: await _authHeaders(),
-      body: jsonEncode({
-        'bank_id': bankId,
-        'name': name,
-        'credit_limit': creditLimit,
-        'billing_day': billingDay,
-        'due_day': dueDay,
-      }),
-    );
-    if (response.statusCode != 200) throw Exception('新增信用額度失敗');
-    return CreditAccount.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
-  }
-
-  Future<CreditAccount> updateCreditAccount(
-    int id, {
-    required int bankId,
-    required String name,
-    required double creditLimit,
-    int? billingDay,
-    int? dueDay,
-  }) async {
-    final response = await http.put(
-      Uri.parse('$baseUrl/credit-accounts/$id'),
-      headers: await _authHeaders(),
-      body: jsonEncode({
-        'bank_id': bankId,
-        'name': name,
-        'credit_limit': creditLimit,
-        'billing_day': billingDay,
-        'due_day': dueDay,
-      }),
-    );
-    if (response.statusCode != 200) throw Exception('更新信用額度失敗');
-    return CreditAccount.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
-  }
-
-  Future<void> deleteCreditAccount(int id) async {
-    final response =
-        await http.delete(Uri.parse('$baseUrl/credit-accounts/$id'), headers: await _authHeaders());
-    if (response.statusCode != 200) throw Exception('刪除信用額度失敗');
-  }
-
-  Future<CreditAccountAvailable> fetchAvailableCredit(int accountId) async {
-    final response = await http.get(
-      Uri.parse('$baseUrl/credit-accounts/$accountId/available-credit'),
-      headers: await _authHeaders(),
-    );
-    if (response.statusCode != 200) throw Exception('載入可用額度失敗');
-    return CreditAccountAvailable.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
-  }
-
-  // ── Statements ────────────────────────────────────────────────────────────
-
-  Future<List<Statement>> fetchStatements({int? creditAccountId}) async {
-    final uri = Uri.parse('$baseUrl/statements').replace(
-      queryParameters: creditAccountId != null ? {'credit_account_id': '$creditAccountId'} : null,
-    );
-    final response = await http.get(uri, headers: await _authHeaders());
-    if (response.statusCode != 200) throw Exception('載入帳單失敗');
-    final List<dynamic> data = jsonDecode(response.body);
-    return data.map((json) => Statement.fromJson(json as Map<String, dynamic>)).toList();
-  }
-
-  String _formatDate(DateTime date) =>
-      '${date.year.toString().padLeft(4, '0')}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
-
-  Future<Statement> createStatement({
-    required int creditAccountId,
-    required DateTime periodStart,
-    required DateTime periodEnd,
-    required DateTime statementDate,
-    required DateTime dueDate,
-    required double statementAmount,
-    double? minimumDue,
-  }) async {
-    final response = await http.post(
-      Uri.parse('$baseUrl/statements'),
-      headers: await _authHeaders(),
-      body: jsonEncode({
-        'credit_account_id': creditAccountId,
-        'period_start': _formatDate(periodStart),
-        'period_end': _formatDate(periodEnd),
-        'statement_date': _formatDate(statementDate),
-        'due_date': _formatDate(dueDate),
-        'statement_amount': statementAmount,
-        'minimum_due': minimumDue,
-      }),
-    );
-    if (response.statusCode != 200) throw Exception('新增帳單失敗');
-    return Statement.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
-  }
-
-  Future<Statement> updateStatement(
-    int id, {
-    required int creditAccountId,
-    required DateTime periodStart,
-    required DateTime periodEnd,
-    required DateTime statementDate,
-    required DateTime dueDate,
-    required double statementAmount,
-    double? minimumDue,
-  }) async {
-    final response = await http.put(
-      Uri.parse('$baseUrl/statements/$id'),
-      headers: await _authHeaders(),
-      body: jsonEncode({
-        'credit_account_id': creditAccountId,
-        'period_start': _formatDate(periodStart),
-        'period_end': _formatDate(periodEnd),
-        'statement_date': _formatDate(statementDate),
-        'due_date': _formatDate(dueDate),
-        'statement_amount': statementAmount,
-        'minimum_due': minimumDue,
-      }),
-    );
-    if (response.statusCode != 200) throw Exception('更新帳單失敗');
-    return Statement.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
-  }
-
-  Future<void> deleteStatement(int id) async {
-    final response = await http.delete(Uri.parse('$baseUrl/statements/$id'), headers: await _authHeaders());
-    if (response.statusCode != 200) throw Exception('刪除帳單失敗');
   }
 
   // ── Income ────────────────────────────────────────────────────────────────
@@ -591,6 +408,7 @@ class ApiClient {
     bool isCod = false,
     bool isLoan = false,
     String? loanPerson,
+    String? date,
   }) async {
     final response = await http.post(
       Uri.parse('$baseUrl/transactions'),
@@ -606,6 +424,7 @@ class ApiClient {
         'is_cod': isCod,
         'is_loan': isLoan,
         'loan_person': loanPerson,
+        'date': date,
       }),
     );
     if (response.statusCode != 200) throw Exception('新增交易失敗');

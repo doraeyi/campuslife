@@ -15,6 +15,7 @@ class Transaction {
   final bool codPaid;
   final bool isLoan;
   final String? loanPerson;
+  final DateTime? transactionDate; // 使用者選的交易日期，跟 createdAt（實際輸入時間）分開
   final DateTime createdAt;
   final AppCard? card;
 
@@ -31,12 +32,17 @@ class Transaction {
     this.codPaid = true,
     this.isLoan = false,
     this.loanPerson,
+    this.transactionDate,
     required this.createdAt,
     this.card,
   });
 
   bool get isExpense => transactionType == 'expense';
   bool get isCodUnpaid => isCod && !codPaid;
+
+  // 用來分類「這筆算哪一天/哪個月」：優先用使用者選的交易日期，
+  // 沒有的話（例如舊資料、自動匯入的紀錄）才退回實際輸入時間
+  DateTime get effectiveDate => transactionDate ?? createdAt;
 
   factory Transaction.fromJson(Map<String, dynamic> json) => Transaction(
         id: json['id'] as int,
@@ -51,6 +57,9 @@ class Transaction {
         codPaid: json['cod_paid'] as bool? ?? true,
         isLoan: json['is_loan'] as bool? ?? false,
         loanPerson: json['loan_person'] as String?,
+        transactionDate: json['transaction_date'] != null
+            ? DateTime.parse(json['transaction_date'] as String)
+            : null,
         createdAt: DateTime.parse(json['created_at'] as String),
         card: json['card'] != null
             ? AppCard.fromJson(json['card'] as Map<String, dynamic>)

@@ -8,9 +8,7 @@ import 'package:go_router/go_router.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../../models/bank.dart';
 import '../../models/card_model.dart';
-import '../../models/credit_account.dart';
 import '../../models/group_shift.dart';
 import '../../models/job.dart';
 import '../../models/settings_models.dart';
@@ -18,8 +16,6 @@ import '../../models/user.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/api_client.dart';
 import 'providers/settings_provider.dart';
-import 'widgets/bank_form_sheet.dart';
-import 'widgets/credit_account_form_sheet.dart';
 import 'widgets/job_form_sheet.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -48,8 +44,6 @@ class SettingsPage extends HookConsumerWidget {
     final cardExpanded = useState(false);
     final budgetExpanded = useState(false);
     final jobExpanded = useState(false);
-    final bankExpanded = useState(false);
-    final creditAccountExpanded = useState(false);
 
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.surfaceContainerLowest,
@@ -112,16 +106,6 @@ class SettingsPage extends HookConsumerWidget {
                       _JobsAccordion(
                         expanded: jobExpanded.value,
                         onToggle: () => jobExpanded.value = !jobExpanded.value,
-                      ),
-                      const _Divider(),
-                      _BanksAccordion(
-                        expanded: bankExpanded.value,
-                        onToggle: () => bankExpanded.value = !bankExpanded.value,
-                      ),
-                      const _Divider(),
-                      _CreditAccountsAccordion(
-                        expanded: creditAccountExpanded.value,
-                        onToggle: () => creditAccountExpanded.value = !creditAccountExpanded.value,
                       ),
                     ],
                   ),
@@ -1039,256 +1023,6 @@ class _JobRow extends ConsumerWidget {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Banks Accordion
-// ─────────────────────────────────────────────────────────────────────────────
-
-class _BanksAccordion extends ConsumerWidget {
-  const _BanksAccordion({required this.expanded, required this.onToggle});
-  final bool expanded;
-  final VoidCallback onToggle;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final banksAsync = ref.watch(banksProvider);
-    final banks = banksAsync.value ?? [];
-
-    Widget trailing;
-    if (banksAsync.isLoading) {
-      trailing = const SizedBox(
-          width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2));
-    } else {
-      trailing = Text(
-        banks.isEmpty ? '未設定' : '${banks.length} 家',
-        style: const TextStyle(color: _kGrey, fontSize: 13),
-      );
-    }
-
-    return Column(
-      children: [
-        _accordionHeader(
-          leading: const Icon(Icons.account_balance_outlined, color: Color(0xFF0EA5E9), size: 24),
-          title: '銀行',
-          trailing: trailing,
-          expanded: expanded,
-          onToggle: onToggle,
-        ),
-        if (expanded)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-            child: Column(
-              children: [
-                Row(
-                  children: [
-                    const Text('銀行列表', style: TextStyle(color: _kGrey, fontSize: 13)),
-                    const Spacer(),
-                    TextButton.icon(
-                      onPressed: () => showBankFormSheet(context),
-                      icon: const Icon(Icons.add, size: 16),
-                      label: const Text('新增'),
-                      style: TextButton.styleFrom(
-                        foregroundColor: _kAmber,
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      ),
-                    ),
-                  ],
-                ),
-                if (banks.isEmpty)
-                  const Padding(
-                    padding: EdgeInsets.only(top: 8),
-                    child: Text('尚無銀行，點「新增」開始建立',
-                        style: TextStyle(color: Color(0xFF9CA3AF), fontSize: 13)),
-                  )
-                else
-                  ...banks.map((bank) => _BankRow(bank: bank)),
-              ],
-            ),
-          ),
-      ],
-    );
-  }
-}
-
-class _BankRow extends ConsumerWidget {
-  const _BankRow({required this.bank});
-  final Bank bank;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return ListTile(
-      dense: true,
-      leading: const Icon(Icons.account_balance_outlined, size: 20, color: Color(0xFF0EA5E9)),
-      title: Text(bank.name, style: const TextStyle(fontSize: 14)),
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          IconButton(
-            icon: const Icon(Icons.edit_outlined, size: 18, color: _kGrey),
-            onPressed: () => showBankFormSheet(context, bank: bank),
-            tooltip: '編輯',
-            constraints: const BoxConstraints(),
-            padding: const EdgeInsets.all(6),
-          ),
-          IconButton(
-            icon: const Icon(Icons.delete_outline, size: 18, color: _kRose),
-            onPressed: () async {
-              final ok = await showDialog<bool>(
-                context: context,
-                builder: (ctx) => AlertDialog(
-                  title: const Text('刪除銀行'),
-                  content: Text('確定要刪除「${bank.name}」嗎？'),
-                  actions: [
-                    TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
-                    TextButton(
-                      onPressed: () => Navigator.pop(ctx, true),
-                      child: const Text('刪除', style: TextStyle(color: _kRose)),
-                    ),
-                  ],
-                ),
-              );
-              if (ok == true) {
-                await ref.read(banksProvider.notifier).deleteBank(bank.id);
-              }
-            },
-            tooltip: '刪除',
-            constraints: const BoxConstraints(),
-            padding: const EdgeInsets.all(6),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Credit Accounts Accordion
-// ─────────────────────────────────────────────────────────────────────────────
-
-class _CreditAccountsAccordion extends ConsumerWidget {
-  const _CreditAccountsAccordion({required this.expanded, required this.onToggle});
-  final bool expanded;
-  final VoidCallback onToggle;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final accountsAsync = ref.watch(creditAccountsProvider);
-    final accounts = accountsAsync.value ?? [];
-
-    Widget trailing;
-    if (accountsAsync.isLoading) {
-      trailing = const SizedBox(
-          width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2));
-    } else {
-      trailing = Text(
-        accounts.isEmpty ? '未設定' : '${accounts.length} 個',
-        style: const TextStyle(color: _kGrey, fontSize: 13),
-      );
-    }
-
-    return Column(
-      children: [
-        _accordionHeader(
-          leading: const Icon(Icons.credit_score_outlined, color: Color(0xFF14B8A6), size: 24),
-          title: '信用額度',
-          trailing: trailing,
-          expanded: expanded,
-          onToggle: onToggle,
-        ),
-        if (expanded)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-            child: Column(
-              children: [
-                Row(
-                  children: [
-                    const Text('額度群組列表', style: TextStyle(color: _kGrey, fontSize: 13)),
-                    const Spacer(),
-                    TextButton.icon(
-                      onPressed: () => showCreditAccountFormSheet(context),
-                      icon: const Icon(Icons.add, size: 16),
-                      label: const Text('新增'),
-                      style: TextButton.styleFrom(
-                        foregroundColor: _kAmber,
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      ),
-                    ),
-                  ],
-                ),
-                if (accounts.isEmpty)
-                  const Padding(
-                    padding: EdgeInsets.only(top: 8),
-                    child: Text('尚無額度群組，點「新增」開始建立',
-                        style: TextStyle(color: Color(0xFF9CA3AF), fontSize: 13)),
-                  )
-                else
-                  ...accounts.map((account) => _CreditAccountRow(account: account)),
-              ],
-            ),
-          ),
-      ],
-    );
-  }
-}
-
-class _CreditAccountRow extends ConsumerWidget {
-  const _CreditAccountRow({required this.account});
-  final CreditAccount account;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final bankName = account.bank?.name;
-    final subtitle = [
-      if (bankName != null) bankName,
-      '額度 \$${account.creditLimit.toStringAsFixed(0)}',
-    ].join(' · ');
-
-    return ListTile(
-      dense: true,
-      leading: const Icon(Icons.credit_score_outlined, size: 20, color: Color(0xFF14B8A6)),
-      title: Text(account.name, style: const TextStyle(fontSize: 14)),
-      subtitle: Text(subtitle, style: const TextStyle(fontSize: 12)),
-      onTap: () => context.push('/settings/credit-accounts/${account.id}'),
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          IconButton(
-            icon: const Icon(Icons.edit_outlined, size: 18, color: _kGrey),
-            onPressed: () => showCreditAccountFormSheet(context, account: account),
-            tooltip: '編輯',
-            constraints: const BoxConstraints(),
-            padding: const EdgeInsets.all(6),
-          ),
-          IconButton(
-            icon: const Icon(Icons.delete_outline, size: 18, color: _kRose),
-            onPressed: () async {
-              final ok = await showDialog<bool>(
-                context: context,
-                builder: (ctx) => AlertDialog(
-                  title: const Text('刪除額度群組'),
-                  content: Text('確定要刪除「${account.name}」嗎？'),
-                  actions: [
-                    TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
-                    TextButton(
-                      onPressed: () => Navigator.pop(ctx, true),
-                      child: const Text('刪除', style: TextStyle(color: _kRose)),
-                    ),
-                  ],
-                ),
-              );
-              if (ok == true) {
-                await ref.read(creditAccountsProvider.notifier).deleteCreditAccount(account.id);
-              }
-            },
-            tooltip: '刪除',
-            constraints: const BoxConstraints(),
-            padding: const EdgeInsets.all(6),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
 // Job Share Sheet
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -1515,7 +1249,6 @@ class _CardFormSheet extends HookConsumerWidget {
         useTextEditingController(text: card?.reminderDay?.toString() ?? '');
     final type = useState(card?.type ?? 'credit');
     final color = useState(card?.color ?? '#6366F1');
-    final selectedCreditAccountId = useState(card?.creditAccountId);
     final saving = useState(false);
     final formKey = useMemoized(GlobalKey<FormState>.new);
 
@@ -1534,7 +1267,6 @@ class _CardFormSheet extends HookConsumerWidget {
             ? paymentDueDateCtrl.text.trim()
             : null;
         final reminderDay = isCredit ? int.tryParse(reminderDayCtrl.text) : null;
-        final creditAccountId = isCredit ? selectedCreditAccountId.value : null;
         final bank = isEasycard
             ? null
             : (bankCtrl.text.trim().isEmpty ? null : bankCtrl.text.trim());
@@ -1544,14 +1276,12 @@ class _CardFormSheet extends HookConsumerWidget {
             name: nameCtrl.text.trim(), type: type.value, color: color.value,
             bank: bank, lastFour: lastFour, balance: balance,
             dueAmount: dueAmount, paymentDueDate: paymentDueDate, reminderDay: reminderDay,
-            creditAccountId: creditAccountId,
           );
         } else {
           await ref.read(cardsProvider.notifier).updateCard(
             card!.id, name: nameCtrl.text.trim(), type: type.value, color: color.value,
             bank: bank, lastFour: lastFour, balance: balance,
             dueAmount: dueAmount, paymentDueDate: paymentDueDate, reminderDay: reminderDay,
-            creditAccountId: creditAccountId,
           );
         }
         if (context.mounted) Navigator.pop(context);
@@ -1729,27 +1459,6 @@ class _CardFormSheet extends HookConsumerWidget {
                       ),
                     ),
                   ],
-                ),
-                const SizedBox(height: 12),
-                Consumer(
-                  builder: (context, ref, _) {
-                    final accountsAsync = ref.watch(creditAccountsProvider);
-                    final accounts = accountsAsync.value ?? [];
-                    if (accounts.isEmpty) return const SizedBox.shrink();
-                    return DropdownButtonFormField<int?>(
-                      initialValue: selectedCreditAccountId.value,
-                      decoration: const InputDecoration(
-                        labelText: '額度群組（選填）',
-                        border: OutlineInputBorder(),
-                        isDense: true,
-                      ),
-                      items: [
-                        const DropdownMenuItem<int?>(value: null, child: Text('不指定')),
-                        ...accounts.map((a) => DropdownMenuItem<int?>(value: a.id, child: Text(a.name))),
-                      ],
-                      onChanged: (v) => selectedCreditAccountId.value = v,
-                    );
-                  },
                 ),
                 const SizedBox(height: 16),
               ],
