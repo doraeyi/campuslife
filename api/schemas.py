@@ -473,7 +473,7 @@ class RosterShiftEntry(BaseModel):
 
 
 class RosterConfirmRequest(BaseModel):
-    store_name: str | None = None
+    job_id: int | None = None
     period_start: date
     period_end: date
     shifts: list[RosterShiftEntry]
@@ -495,7 +495,8 @@ class RosterUploadRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
-    store_name: str | None
+    job_id: int | None
+    job: JobPublicRead | None = None
     period_start: date
     period_end: date
     created_at: datetime

@@ -276,16 +276,19 @@ class PendingRosterPhoto(Base):
 
 class RosterUpload(Base):
     """一次確認匯入的排班表批次（一張照片 = 一批），刪除時整批 cascade
-    掉底下的 RosterShift，方便重新匯入辨識錯誤的整批資料。"""
+    掉底下的 RosterShift，方便重新匯入辨識錯誤的整批資料。job_id 對應到
+    使用者在「工作管理」建立的某個 Job，讓匯入時直接選現有工作，不用自己
+    打店名。"""
     __tablename__ = "roster_uploads"
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
-    store_name = Column(String(100), nullable=True)
+    job_id = Column(Integer, ForeignKey("jobs.id"), nullable=True, index=True)
     period_start = Column(Date, nullable=False)
     period_end = Column(Date, nullable=False)
     created_at = Column(DateTime, server_default=func.now())
 
+    job = relationship("Job")
     shifts = relationship(
         "RosterShift", cascade="all, delete-orphan",
         order_by="RosterShift.date, RosterShift.employee_name", lazy="selectin",

@@ -615,7 +615,7 @@ class ApiClient {
   /// (`HH:MM`，休假傳 null) / end_time / note，形狀對應校正畫面的表格資料。
   Future<RosterUpload> confirmRosterImport({
     int? pendingId,
-    String? storeName,
+    int? jobId,
     required DateTime periodStart,
     required DateTime periodEnd,
     required List<Map<String, dynamic>> shifts,
@@ -625,7 +625,7 @@ class ApiClient {
       Uri.parse('$baseUrl$path'),
       headers: await _authHeaders(),
       body: jsonEncode({
-        'store_name': storeName,
+        'job_id': jobId,
         'period_start': periodStart.toIso8601String().split('T').first,
         'period_end': periodEnd.toIso8601String().split('T').first,
         'shifts': shifts,

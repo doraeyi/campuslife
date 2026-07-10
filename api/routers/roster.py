@@ -17,7 +17,7 @@ def _create_roster_upload(
 ) -> models.RosterUpload:
     upload = models.RosterUpload(
         user_id=current_user.id,
-        store_name=payload.store_name,
+        job_id=payload.job_id,
         period_start=payload.period_start,
         period_end=payload.period_end,
     )

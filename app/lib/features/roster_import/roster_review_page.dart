@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../../models/job.dart';
 import '../../services/api_client.dart';
+import '../settings/providers/settings_provider.dart';
 import 'parsers/roster_table_parser.dart';
 import 'providers/roster_pending_provider.dart';
 
@@ -54,7 +56,7 @@ class _EditableRow {
 }
 
 class _RosterReviewPageState extends ConsumerState<RosterReviewPage> {
-  final _storeNameCtrl = TextEditingController();
+  int? _selectedJobId;
   late List<DateTime> _dates;
   late List<_EditableRow> _rows;
   bool _saving = false;
@@ -70,7 +72,6 @@ class _RosterReviewPageState extends ConsumerState<RosterReviewPage> {
 
   @override
   void dispose() {
-    _storeNameCtrl.dispose();
     for (final r in _rows) {
       r.dispose();
     }
@@ -158,7 +159,7 @@ class _RosterReviewPageState extends ConsumerState<RosterReviewPage> {
       final sortedDates = List.of(_dates)..sort();
       await ApiClient().confirmRosterImport(
         pendingId: widget.pendingId,
-        storeName: _storeNameCtrl.text.trim().isEmpty ? null : _storeNameCtrl.text.trim(),
+        jobId: _selectedJobId,
         periodStart: sortedDates.first,
         periodEnd: sortedDates.last,
         shifts: shifts,
@@ -177,6 +178,8 @@ class _RosterReviewPageState extends ConsumerState<RosterReviewPage> {
 
   @override
   Widget build(BuildContext context) {
+    final jobs = ref.watch(settingsJobsProvider).value ?? const <Job>[];
+
     return Scaffold(
       appBar: AppBar(title: const Text('校正班表')),
       body: SafeArea(
@@ -184,13 +187,18 @@ class _RosterReviewPageState extends ConsumerState<RosterReviewPage> {
           children: [
             Padding(
               padding: const EdgeInsets.all(16),
-              child: TextField(
-                controller: _storeNameCtrl,
+              child: DropdownButtonFormField<int?>(
+                initialValue: _selectedJobId,
                 decoration: const InputDecoration(
-                  labelText: '店名（選填）',
+                  labelText: '匯入到哪個工作',
                   border: OutlineInputBorder(),
                   isDense: true,
                 ),
+                items: [
+                  const DropdownMenuItem<int?>(value: null, child: Text('不指定')),
+                  ...jobs.map((j) => DropdownMenuItem<int?>(value: j.id, child: Text(j.name))),
+                ],
+                onChanged: (v) => setState(() => _selectedJobId = v),
               ),
             ),
             Expanded(

@@ -42,7 +42,7 @@ class RosterShift {
 
 class RosterUpload {
   final int id;
-  final String? storeName;
+  final int? jobId;
   final DateTime periodStart;
   final DateTime periodEnd;
   final DateTime createdAt;
@@ -50,7 +50,7 @@ class RosterUpload {
 
   const RosterUpload({
     required this.id,
-    this.storeName,
+    this.jobId,
     required this.periodStart,
     required this.periodEnd,
     required this.createdAt,
@@ -59,7 +59,7 @@ class RosterUpload {
 
   factory RosterUpload.fromJson(Map<String, dynamic> json) => RosterUpload(
         id: json['id'] as int,
-        storeName: json['store_name'] as String?,
+        jobId: json['job_id'] as int?,
         periodStart: DateTime.parse(json['period_start'] as String),
         periodEnd: DateTime.parse(json['period_end'] as String),
         createdAt: DateTime.parse(json['created_at'] as String),
