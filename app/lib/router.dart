@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'features/auto_bookkeeping/auto_bookkeeping_hub_page.dart';
 import 'features/bank_notify/screenshot_import_page.dart';
 import 'features/einvoice/einvoice_import_page.dart';
+import 'features/roster_import/roster_import_page.dart';
 import 'features/settings/profile_page.dart';
 import 'features/settings/settings_page.dart';
 import 'screens/app_scaffold.dart';
@@ -14,6 +15,7 @@ import 'screens/income_tab.dart';
 import 'screens/login_screen.dart';
 import 'screens/register_screen.dart';
 import 'screens/schedule_screen.dart';
+import 'screens/team_roster_page.dart';
 import 'screens/wallet_screen.dart';
 import 'services/auth_service.dart';
 
@@ -58,6 +60,10 @@ final appRouter = GoRouter(
       path: '/settings/bank-notify',
       builder: (_, __) => const ScreenshotImportPage(),
     ),
+    GoRoute(
+      path: '/settings/roster-import',
+      builder: (_, __) => const RosterImportPage(),
+    ),
 
     // ── Main shell ──────────────────────────────────────────────────────
     ShellRoute(
@@ -70,6 +76,12 @@ final appRouter = GoRouter(
         GoRoute(
           path: '/schedule',
           pageBuilder: (_, __) => const NoTransitionPage(child: ScheduleScreen()),
+          routes: [
+            GoRoute(
+              path: 'team-roster',
+              pageBuilder: (_, __) => const NoTransitionPage(child: TeamRosterPage()),
+            ),
+          ],
         ),
         GoRoute(
           path: '/friends',

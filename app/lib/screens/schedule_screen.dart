@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:table_calendar/table_calendar.dart';
 
 import '../data/shift_type_colors.dart';
@@ -371,6 +372,11 @@ class _MonthHeader extends StatelessWidget {
                 icon: const Icon(Icons.chevron_right_rounded),
                 iconSize: 28,
                 onPressed: onNext,
+              ),
+              IconButton(
+                icon: const Icon(Icons.table_chart_outlined),
+                tooltip: '團隊班表',
+                onPressed: () => context.push('/schedule/team-roster'),
               ),
             ],
           ),

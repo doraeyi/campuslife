@@ -456,6 +456,52 @@ class NotifyPendingRequest(BaseModel):
     summary: str
 
 
+class PendingRosterPhotoRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    created_at: datetime
+
+
+class RosterShiftEntry(BaseModel):
+    """校正畫面送出的一格：某個員工在某天的班。start/end 皆為 None 代表休假。"""
+    employee_name: str
+    date: date
+    start_time: time | None = None
+    end_time: time | None = None
+    note: str | None = None
+
+
+class RosterConfirmRequest(BaseModel):
+    store_name: str | None = None
+    period_start: date
+    period_end: date
+    shifts: list[RosterShiftEntry]
+
+
+class RosterShiftRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    roster_upload_id: int
+    employee_name: str
+    date: date
+    start_time: time | None
+    end_time: time | None
+    note: str | None
+
+
+class RosterUploadRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    store_name: str | None
+    period_start: date
+    period_end: date
+    created_at: datetime
+    shifts: list[RosterShiftRead] = []
+
+
 class FriendRequestCreate(BaseModel):
     email: EmailStr
 

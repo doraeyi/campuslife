@@ -20,6 +20,9 @@ class User(Base):
     line_link_code_expires_at = Column(DateTime(timezone=True), nullable=True)
     reset_code = Column(String(10), nullable=True)
     reset_code_expires_at = Column(DateTime(timezone=True), nullable=True)
+    # LINE 文字指令「班表」觸發的短效旗標：效期內傳的下一張圖片會被當成排班表
+    # 照片處理，而不是預設的銀行通知截圖，見 routers/line.py 的 _handle_image。
+    roster_import_expected_until = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime, server_default=func.now())
 
 
@@ -257,3 +260,50 @@ class JobShare(Base):
 
     job = relationship("Job")
     shared_with = relationship("User", foreign_keys=[shared_with_id])
+
+
+class PendingRosterPhoto(Base):
+    """LINE 傳來的排班表照片，暫存在這裡等使用者打開 App 用手機本機 OCR
+    辨識、校正、確認匯入，存法比照 PendingBankScreenshot。"""
+    __tablename__ = "pending_roster_photos"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    image_data = Column(LONGBLOB, nullable=False)
+    content_type = Column(String(50), nullable=False, default="image/jpeg")
+    created_at = Column(DateTime, server_default=func.now())
+
+
+class RosterUpload(Base):
+    """一次確認匯入的排班表批次（一張照片 = 一批），刪除時整批 cascade
+    掉底下的 RosterShift，方便重新匯入辨識錯誤的整批資料。"""
+    __tablename__ = "roster_uploads"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    store_name = Column(String(100), nullable=True)
+    period_start = Column(Date, nullable=False)
+    period_end = Column(Date, nullable=False)
+    created_at = Column(DateTime, server_default=func.now())
+
+    shifts = relationship(
+        "RosterShift", cascade="all, delete-orphan",
+        order_by="RosterShift.date, RosterShift.employee_name", lazy="selectin",
+    )
+
+
+class RosterShift(Base):
+    """整份排班表其中一格：某個員工在某天的班。employee_name 是自由文字，
+    不是 Card 這種綁定 users.id 的欄位——同事通常不是這個 App 的使用者。"""
+    __tablename__ = "roster_shifts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    # 冗餘存一份 user_id（仿照 Statement/Payment 都各自存 user_id 的慣例），
+    # 讓 /roster/shifts?start=&end= 可以單一 indexed query 不必 join RosterUpload。
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    roster_upload_id = Column(Integer, ForeignKey("roster_uploads.id", ondelete="CASCADE"), nullable=False, index=True)
+    employee_name = Column(String(50), nullable=False)
+    date = Column(Date, nullable=False, index=True)
+    start_time = Column(Time, nullable=True)  # null = 休假（表格上的「-」）
+    end_time = Column(Time, nullable=True)
+    note = Column(String(100), nullable=True)  # 對應表格右側代班/特休/備註欄位

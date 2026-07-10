@@ -5,7 +5,7 @@ import models
 from database import engine
 from routers import (
     auth, bank_credit_settings, bank_notify, banks, cards, credit_accounts, einvoice,
-    friends, income, jobs, line, payments, schedule, statements, transactions, users,
+    friends, income, jobs, line, payments, roster, schedule, statements, transactions, users,
 )
 
 models.Base.metadata.create_all(bind=engine)
@@ -33,6 +33,7 @@ app.include_router(credit_accounts.router)
 app.include_router(statements.router)
 app.include_router(payments.router)
 app.include_router(bank_credit_settings.router)
+app.include_router(roster.router)
 
 
 @app.get("/")

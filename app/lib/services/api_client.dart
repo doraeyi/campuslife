@@ -13,6 +13,7 @@ import '../models/group_shift.dart';
 import '../models/income.dart';
 import '../models/job.dart';
 import '../models/pending_screenshot.dart';
+import '../models/roster.dart';
 import '../models/settings_models.dart';
 import '../models/shift.dart';
 import '../models/transaction.dart';
@@ -576,6 +577,90 @@ class ApiClient {
       headers: await _authHeaders(),
       body: jsonEncode({'summary': summary}),
     );
+  }
+
+  // ── 排班表匯入（透過 LINE 轉傳給 Bot，或從相簿手動選照片）──────────────────
+
+  Future<List<PendingRosterPhoto>> fetchPendingRosterPhotos() async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/roster/pending'),
+      headers: await _authHeaders(),
+    );
+    if (response.statusCode != 200) throw Exception('載入待確認班表照片失敗');
+    final List<dynamic> data = jsonDecode(response.body);
+    return data.map((json) => PendingRosterPhoto.fromJson(json as Map<String, dynamic>)).toList();
+  }
+
+  Future<Uint8List> fetchPendingRosterPhotoImage(int id) async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/roster/pending/$id/image'),
+      headers: await _authHeaders(),
+    );
+    if (response.statusCode != 200) throw Exception('載入照片失敗');
+    return response.bodyBytes;
+  }
+
+  Future<void> deletePendingRosterPhoto(int id) async {
+    await http.delete(
+      Uri.parse('$baseUrl/roster/pending/$id'),
+      headers: await _authHeaders(),
+    );
+  }
+
+  /// [pendingId] 不為 null 時代表這是 LINE 傳來的待處理照片，確認後後端會
+  /// 一併刪除該筆待處理紀錄並推播 LINE 通知；null 則是從相簿手動選圖匯入，
+  /// 直接建立班表、沒有對應的待處理照片。
+  ///
+  /// [shifts] 每筆需含 employee_name / date(`YYYY-MM-DD`) / start_time
+  /// (`HH:MM`，休假傳 null) / end_time / note，形狀對應校正畫面的表格資料。
+  Future<RosterUpload> confirmRosterImport({
+    int? pendingId,
+    String? storeName,
+    required DateTime periodStart,
+    required DateTime periodEnd,
+    required List<Map<String, dynamic>> shifts,
+  }) async {
+    final path = pendingId != null ? '/roster/pending/$pendingId/confirm' : '/roster/confirm';
+    final response = await http.post(
+      Uri.parse('$baseUrl$path'),
+      headers: await _authHeaders(),
+      body: jsonEncode({
+        'store_name': storeName,
+        'period_start': periodStart.toIso8601String().split('T').first,
+        'period_end': periodEnd.toIso8601String().split('T').first,
+        'shifts': shifts,
+      }),
+    );
+    if (response.statusCode != 200) throw Exception('匯入班表失敗');
+    return RosterUpload.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+  }
+
+  Future<List<RosterUpload>> fetchRosterUploads() async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/roster/uploads'),
+      headers: await _authHeaders(),
+    );
+    if (response.statusCode != 200) throw Exception('載入班表紀錄失敗');
+    final List<dynamic> data = jsonDecode(response.body);
+    return data.map((json) => RosterUpload.fromJson(json as Map<String, dynamic>)).toList();
+  }
+
+  Future<void> deleteRosterUpload(int id) async {
+    await http.delete(
+      Uri.parse('$baseUrl/roster/uploads/$id'),
+      headers: await _authHeaders(),
+    );
+  }
+
+  Future<List<RosterShift>> fetchRosterShifts(DateTime start, DateTime end) async {
+    final uri = Uri.parse('$baseUrl/roster/shifts').replace(queryParameters: {
+      'start': start.toIso8601String().split('T').first,
+      'end': end.toIso8601String().split('T').first,
+    });
+    final response = await http.get(uri, headers: await _authHeaders());
+    if (response.statusCode != 200) throw Exception('載入班表失敗');
+    final List<dynamic> data = jsonDecode(response.body);
+    return data.map((json) => RosterShift.fromJson(json as Map<String, dynamic>)).toList();
   }
 
   Future<AppCard> updateCardBalance(int cardId, double balance) async {

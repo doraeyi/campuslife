@@ -227,6 +227,14 @@ def _handle_text(text: str, line_user_id: str, reply_token: str, db: Session):
         _reply(reply_token, "你還沒綁定帳號！\n請在 App 設定頁產生綁定碼，再傳「綁定 XXXXXX」給我。")
         return
 
+    # ── 排班表照片匯入：先傳「班表」開啟短效模式，接下來收到的第一張圖片會被
+    # 當成排班表照片處理，而不是預設的銀行通知截圖，見 _handle_image。 ─────────
+    if text in ("班表", "排班表"):
+        user.roster_import_expected_until = datetime.now(timezone.utc) + timedelta(minutes=10)
+        db.commit()
+        _reply(reply_token, "好的，接下來收到的照片會當作班表匯入（10 分鐘內有效）📋")
+        return
+
     cards = db.query(models.Card).filter(models.Card.user_id == user.id).all()
 
     # ── 餘額查詢 ──────────────────────────────────────────────────────────────
@@ -358,7 +366,10 @@ def _handle_postback(data_str: str, line_user_id: str, reply_token: str, db: Ses
 
 def _handle_image(message_id: str, line_user_id: str, reply_token: str, db: Session):
     """使用者把銀行 LINE 通知的截圖轉傳過來：先存起來，實際的 OCR 辨識在 App 端用手機
-    本機 OCR 做（跟「銀行通知記帳」畫面裡選相簿匯入是同一套流程），這裡只負責收圖。"""
+    本機 OCR 做（跟「銀行通知記帳」畫面裡選相簿匯入是同一套流程），這裡只負責收圖。
+
+    如果使用者剛傳過「班表」文字指令（roster_import_expected_until 還沒過期），
+    這張圖片改存進 PendingRosterPhoto，走排班表匯入流程而不是銀行通知流程。"""
     user: Optional[models.User] = (
         db.query(models.User).filter(models.User.line_user_id == line_user_id).first()
     )
@@ -366,8 +377,26 @@ def _handle_image(message_id: str, line_user_id: str, reply_token: str, db: Sess
         _reply(reply_token, "你還沒綁定帳號！\n請在 App 設定頁產生綁定碼，再傳「綁定 XXXXXX」給我。")
         return
 
+    expecting_roster = (
+        user.roster_import_expected_until is not None
+        and user.roster_import_expected_until > datetime.now(timezone.utc)
+    )
+    # 不管有沒有過期，收到圖片就清掉旗標，避免第二張圖片也被誤判成班表。
+    user.roster_import_expected_until = None
+
     with LineApiClient(_line_config) as client:
         image_bytes = MessagingApiBlob(client).get_message_content(message_id)
+
+    if expecting_roster:
+        photo = models.PendingRosterPhoto(
+            user_id=user.id,
+            image_data=bytes(image_bytes),
+            content_type="image/jpeg",
+        )
+        db.add(photo)
+        db.commit()
+        _reply(reply_token, "📋 已收到班表照片！打開 YiWallet 的「班表匯入」確認辨識結果。")
+        return
 
     shot = models.PendingBankScreenshot(
         user_id=user.id,
