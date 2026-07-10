@@ -377,9 +377,13 @@ def _handle_image(message_id: str, line_user_id: str, reply_token: str, db: Sess
         _reply(reply_token, "你還沒綁定帳號！\n請在 App 設定頁產生綁定碼，再傳「綁定 XXXXXX」給我。")
         return
 
+    # MySQL 的 DATETIME 欄位讀回來是 naive datetime（沒有 tzinfo），即使
+    # column 宣告 DateTime(timezone=True) 也一樣，所以這裡要用 naive UTC
+    # 去比，不能直接拿 tz-aware 的 now() 比較（會噴 TypeError）。
+    now_utc_naive = datetime.now(timezone.utc).replace(tzinfo=None)
     expecting_roster = (
         user.roster_import_expected_until is not None
-        and user.roster_import_expected_until > datetime.now(timezone.utc)
+        and user.roster_import_expected_until > now_utc_naive
     )
     # 不管有沒有過期，收到圖片就清掉旗標，避免第二張圖片也被誤判成班表。
     user.roster_import_expected_until = None
