@@ -15,7 +15,6 @@ import 'screens/income_tab.dart';
 import 'screens/login_screen.dart';
 import 'screens/register_screen.dart';
 import 'screens/schedule_screen.dart';
-import 'screens/team_roster_page.dart';
 import 'screens/wallet_screen.dart';
 import 'services/auth_service.dart';
 
@@ -76,12 +75,6 @@ final appRouter = GoRouter(
         GoRoute(
           path: '/schedule',
           pageBuilder: (_, __) => const NoTransitionPage(child: ScheduleScreen()),
-          routes: [
-            GoRoute(
-              path: 'team-roster',
-              pageBuilder: (_, __) => const NoTransitionPage(child: TeamRosterPage()),
-            ),
-          ],
         ),
         GoRoute(
           path: '/friends',

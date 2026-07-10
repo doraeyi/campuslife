@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 import 'package:table_calendar/table_calendar.dart';
 
 import '../data/shift_type_colors.dart';
@@ -12,6 +11,7 @@ import '../services/salary_calculator.dart';
 import '../widgets/friends_banner.dart';
 import 'add_transaction_sheet.dart';
 import 'schedule_widgets.dart';
+import 'team_roster_view.dart';
 import '../services/notification_service.dart';
 
 // ── Design tokens ──────────────────────────────────────────────────────────
@@ -43,6 +43,7 @@ class ScheduleScreenState extends State<ScheduleScreen> {
 
   bool _multiSelectMode = false;
   final Set<DateTime> _multiSelectedDays = {};
+  bool _showTeamRoster = false;
 
   @override
   void initState() {
@@ -176,23 +177,41 @@ class ScheduleScreenState extends State<ScheduleScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            // ── Fixed month header ──────────────────────────────────────
-            _MonthHeader(
-              focusedDay: _focusedDay,
-              jobs: _jobs,
-              salaryJob: _salaryJob,
-              onPrev: () => setState(() {
-                _focusedDay = DateTime(_focusedDay.year, _focusedDay.month - 1);
-              }),
-              onNext: () => setState(() {
-                _focusedDay = DateTime(_focusedDay.year, _focusedDay.month + 1);
-              }),
-              onJobSelected: (j) => setState(() => _salaryJob = j),
+            // ── 個人 / 全部人 切換 ────────────────────────────────────────
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+              child: SegmentedButton<bool>(
+                segments: const [
+                  ButtonSegment(
+                      value: false, label: Text('個人'), icon: Icon(Icons.person_outline_rounded)),
+                  ButtonSegment(
+                      value: true, label: Text('全部人'), icon: Icon(Icons.groups_outlined)),
+                ],
+                selected: {_showTeamRoster},
+                onSelectionChanged: (s) => setState(() => _showTeamRoster = s.first),
+              ),
             ),
 
-            // ── Scrollable content ──────────────────────────────────────
-            Expanded(
-              child: FutureBuilder<List<Shift>>(
+            if (_showTeamRoster)
+              const Expanded(child: TeamRosterView())
+            else ...[
+              // ── Fixed month header ──────────────────────────────────────
+              _MonthHeader(
+                focusedDay: _focusedDay,
+                jobs: _jobs,
+                salaryJob: _salaryJob,
+                onPrev: () => setState(() {
+                  _focusedDay = DateTime(_focusedDay.year, _focusedDay.month - 1);
+                }),
+                onNext: () => setState(() {
+                  _focusedDay = DateTime(_focusedDay.year, _focusedDay.month + 1);
+                }),
+                onJobSelected: (j) => setState(() => _salaryJob = j),
+              ),
+
+              // ── Scrollable content ──────────────────────────────────────
+              Expanded(
+                child: FutureBuilder<List<Shift>>(
                 future: _shiftsFuture,
                 builder: (context, snapshot) {
                   if (snapshot.connectionState == ConnectionState.waiting) {
@@ -303,6 +322,7 @@ class ScheduleScreenState extends State<ScheduleScreen> {
                 },
               ),
             ),
+            ],
           ],
         ),
       ),
@@ -372,11 +392,6 @@ class _MonthHeader extends StatelessWidget {
                 icon: const Icon(Icons.chevron_right_rounded),
                 iconSize: 28,
                 onPressed: onNext,
-              ),
-              IconButton(
-                icon: const Icon(Icons.table_chart_outlined),
-                tooltip: '團隊班表',
-                onPressed: () => context.push('/schedule/team-roster'),
               ),
             ],
           ),
