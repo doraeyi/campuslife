@@ -23,8 +23,12 @@ TextBlock _block(List<TextLine> lines) => TextBlock(
     );
 
 void main() {
-  test('座標分群：表頭順序打亂、姓名欄較寬、cell 被拆成兩行、尾端雜訊欄都能正確處理', () {
+  test('座標分群：表頭順序打亂、角色+姓名兩欄、cell 被拆成兩行、表頭上下的雜訊都能正確處理', () {
     final lines = <TextLine>[
+      // 表頭「上面」的文件標題/店號列——之前只排除跟表頭同一 Y 帶重疊的行，
+      // 沒排除表頭上方的行，導致這種列被誤判成員工列。
+      _line('店號:991458 店名:八里', const Rect.fromLTWH(0, 20, 200, 20)),
+
       // 表頭日期，刻意打亂順序（模擬 OCR 實際輸出），parser 要信任 X 座標，
       // 不是文字/行出現的順序。
       _line('07/19(日)', const Rect.fromLTWH(700, 90, 60, 20)),
@@ -35,9 +39,11 @@ void main() {
       _line('07/17(五)', const Rect.fromLTWH(500, 91, 60, 20)),
       _line('07/18(六)', const Rect.fromLTWH(600, 90, 60, 20)),
 
-      // 第一位員工：姓名欄比日期欄寬、跟同一列格子的 Y 中心點沒對齊（測 Y 區間
-      // 重疊而不是中心點距離），07/13 那格被拆成兩個 TextLine。
-      _line('珮甄', const Rect.fromLTWH(0, 175, 80, 30)),
+      // 第一位員工：來源表格「角色」跟「員工姓名」是兩個獨立欄位，角色欄
+      // （PT）比姓名欄更靠左，姓名欄跟同一列格子的 Y 中心點沒對齊（測 Y
+      // 區間重疊而不是中心點距離），07/13 那格被拆成兩個 TextLine。
+      _line('PT', const Rect.fromLTWH(0, 200, 20, 20)),
+      _line('珮甄', const Rect.fromLTWH(30, 175, 60, 30)),
       _line('0700-', const Rect.fromLTWH(90, 200, 30, 20)),
       _line('1500', const Rect.fromLTWH(125, 200, 30, 20)),
       _line('-', const Rect.fromLTWH(190, 200, 20, 20)), // 07/14 休假
@@ -46,7 +52,8 @@ void main() {
       _line('0.0', const Rect.fromLTWH(850, 200, 20, 20)),
 
       // 第二位員工，測多列都能分開處理
-      _line('昇平', const Rect.fromLTWH(5, 260, 60, 20)),
+      _line('PT', const Rect.fromLTWH(0, 260, 20, 20)),
+      _line('昇平', const Rect.fromLTWH(30, 260, 60, 20)),
       _line('1500-2300', const Rect.fromLTWH(390, 260, 70, 20)), // 07/16
 
       // 應該被整列跳過的彙總列
@@ -65,6 +72,10 @@ void main() {
       guess.dates.map((d) => '${d.month}/${d.day}').toList(),
       ['7/13', '7/14', '7/15', '7/16', '7/17', '7/18', '7/19'],
     );
+
+    // 只有兩個真正的員工列——表頭上方的店號列、角色欄的「PT」代碼、彙總
+    // 列都不該冒出額外的列。
+    expect(guess.rows.length, 2);
 
     final peiJhen = guess.rows.firstWhere((r) => r.employeeName == '珮甄');
     expect(peiJhen.cells[0], '0700-1500'); // 07/13，兩行合併

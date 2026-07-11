@@ -109,6 +109,9 @@ class _ShiftCell extends StatelessWidget {
     if (shift!.startTime == null || shift!.endTime == null) {
       return const Text('休', style: TextStyle(color: Colors.grey));
     }
-    return Text('${shift!.startTime}-${shift!.endTime}', style: const TextStyle(fontSize: 12));
+    // 有比對到匯入工作的班別預設就顯示班別名稱（例如「早班」），沒對到才
+    // 退回顯示原始時間區間。
+    final label = shift!.shiftType ?? '${shift!.startTime}-${shift!.endTime}';
+    return Text(label, style: const TextStyle(fontSize: 12));
   }
 }

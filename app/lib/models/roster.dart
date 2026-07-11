@@ -17,6 +17,7 @@ class RosterShift {
   final DateTime date;
   final String? startTime;
   final String? endTime;
+  final String? shiftType;
   final String? note;
 
   const RosterShift({
@@ -26,6 +27,7 @@ class RosterShift {
     required this.date,
     this.startTime,
     this.endTime,
+    this.shiftType,
     this.note,
   });
 
@@ -36,6 +38,7 @@ class RosterShift {
         date: DateTime.parse(json['date'] as String),
         startTime: json['start_time'] as String?,
         endTime: json['end_time'] as String?,
+        shiftType: json['shift_type'] as String?,
         note: json['note'] as String?,
       );
 }

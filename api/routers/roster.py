@@ -24,7 +24,20 @@ def _create_roster_upload(
     db.add(upload)
     db.flush()  # 拿到 upload.id 供底下的 RosterShift 使用
 
+    # 依 (start_time, end_time) 精準比對匯入所選工作底下設定好的班別預設，
+    # 對得到就存班別名稱（例如「早班」），對不到留 null，前端顯示時退回
+    # 顯示原始時間區間。
+    presets = (
+        db.query(models.ShiftPreset).filter(models.ShiftPreset.job_id == payload.job_id).all()
+        if payload.job_id
+        else []
+    )
+    preset_by_time = {(p.start_time, p.end_time): p.label for p in presets}
+
     for entry in payload.shifts:
+        shift_type = None
+        if entry.start_time and entry.end_time:
+            shift_type = preset_by_time.get((entry.start_time, entry.end_time))
         db.add(models.RosterShift(
             user_id=current_user.id,
             roster_upload_id=upload.id,
@@ -32,6 +45,7 @@ def _create_roster_upload(
             date=entry.date,
             start_time=entry.start_time,
             end_time=entry.end_time,
+            shift_type=shift_type,
             note=entry.note,
         ))
     return upload

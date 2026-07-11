@@ -488,6 +488,7 @@ class RosterShiftRead(BaseModel):
     date: date
     start_time: time | None
     end_time: time | None
+    shift_type: str | None = None
     note: str | None
 
 

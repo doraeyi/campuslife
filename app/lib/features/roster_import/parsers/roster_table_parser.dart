@@ -119,7 +119,6 @@ RosterTableGuess _clusterGeometry(List<_PositionedLine> lines, int year) {
 
   final dates = headerSorted.map((h) => h.date).toList();
   final dateColX = headerSorted.map((h) => h.x).toList();
-  final headerTop = headerCluster.map((h) => h.box.top).reduce((a, b) => a < b ? a : b);
   final headerBottom = headerCluster.map((h) => h.box.bottom).reduce((a, b) => a > b ? a : b);
 
   double avgSpacing = 100;
@@ -130,11 +129,15 @@ RosterTableGuess _clusterGeometry(List<_PositionedLine> lines, int year) {
     }
     avgSpacing = totalGap / (dateColX.length - 1);
   }
-  // 虛擬的「姓名欄」錨點，放在第一個日期欄再往左一個欄寬的地方。
-  final anchors = [dateColX.first - avgSpacing, ...dateColX];
+  // 第一個日期欄實際的左邊界，左邊全部算「標籤區」（角色欄 + 姓名欄都在
+  // 這裡，源表格常常是兩欄），不要用猜出來的虛擬欄寬去切——猜錯會讓真正
+  // 的姓名反而比較靠近第一個日期欄，被判成日期資料而不是姓名。
+  final labelZoneRight = headerSorted.first.box.left;
 
-  // 表頭以外、Y 區間跟表頭沒有重疊的行才是表格本體。
-  final bodyLines = lines.where((l) => !(l.box.top < headerBottom && l.box.bottom > headerTop)).toList()
+  // 表頭以外、而且要在表頭「下面」（Y 大於表頭）的行才是表格本體——店號/
+  // 店名/列印日期這些表頭上方的行雖然沒跟表頭同一 Y 帶重疊，但也不是員工
+  // 列，之前只排除「重疊表頭」漏掉了這些。
+  final bodyLines = lines.where((l) => l.box.top >= headerBottom).toList()
     ..sort((a, b) => a.box.top.compareTo(b.box.top));
   final rowClusters = _clusterByYOverlap(bodyLines, (l) => l.box);
 
@@ -149,22 +152,26 @@ RosterTableGuess _clusterGeometry(List<_PositionedLine> lines, int year) {
 
     for (final line in sortedCluster) {
       final x = line.box.center.dx;
+      if (x < labelZoneRight) {
+        // 標籤區：角色欄（PT/PM/P/PI 這種純英文代碼）跟姓名欄都會落在
+        // 這裡，只留有非英數字元（中文姓名）的片段，把角色代碼濾掉。
+        if (RegExp(r'[^\x00-\x7F]').hasMatch(line.text)) {
+          nameParts.add(line.text);
+        }
+        continue;
+      }
       var nearestIdx = 0;
-      var nearestDist = (x - anchors[0]).abs();
-      for (var i = 1; i < anchors.length; i++) {
-        final d = (x - anchors[i]).abs();
+      var nearestDist = (x - dateColX[0]).abs();
+      for (var i = 1; i < dateColX.length; i++) {
+        final d = (x - dateColX[i]).abs();
         if (d < nearestDist) {
           nearestDist = d;
           nearestIdx = i;
         }
       }
-      if (nearestIdx == 0) {
-        // 姓名欄不套距離篩選——中文姓名的欄寬常常跟日期欄不一樣，篩掉的話
-        // 會把整列的姓名弄丟，導致這一列完全不能用。
-        nameParts.add(line.text);
-      } else if (nearestDist <= avgSpacing * 0.6) {
-        // 日期欄才套距離篩選，用來濾掉代班/特休/備註/合計等尾端彙總欄位。
-        cellParts[nearestIdx - 1].add(line.text);
+      // 日期欄要套距離篩選，用來濾掉代班/特休/備註/合計等尾端彙總欄位。
+      if (nearestDist <= avgSpacing * 0.6) {
+        cellParts[nearestIdx].add(line.text);
       }
     }
 

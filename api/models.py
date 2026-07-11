@@ -309,4 +309,8 @@ class RosterShift(Base):
     date = Column(Date, nullable=False, index=True)
     start_time = Column(Time, nullable=True)  # null = 休假（表格上的「-」）
     end_time = Column(Time, nullable=True)
+    # 對應到 RosterUpload.job 底下某個 ShiftPreset 的 label（例如「早班」），
+    # confirm 時依 start_time/end_time 精準比對該工作設定的班別預設，比對不
+    # 到就是 null，前端顯示時退回顯示原始時間區間。
+    shift_type = Column(String(20), nullable=True)
     note = Column(String(100), nullable=True)  # 對應表格右側代班/特休/備註欄位
