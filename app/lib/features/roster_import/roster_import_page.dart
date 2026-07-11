@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 
@@ -12,6 +13,30 @@ import '../../services/api_client.dart';
 import 'parsers/roster_table_parser.dart';
 import 'providers/roster_pending_provider.dart';
 import 'roster_review_page.dart';
+
+/// 排班表照片辨識前的前處理：實測發現手機直接拍的照片（沒特別裁切/沒用
+/// 掃描 App）在這種密集小字印刷表格上，OCR 辨識率非常差（姓名、大部分
+/// 時間格幾乎整批讀不到）。這裡在辨識前自動做「掃描文件」App 那種強化—
+/// 灰階、自動拉滿對比（處理拍照光線不均）、適度加對比、太小就放大——
+/// 不需要使用者改變拍照/傳照片的方式，同一套 LINE 轉傳流程照舊。
+Future<File> _preprocessForOcr(File original) async {
+  final bytes = await original.readAsBytes();
+  var image = img.decodeImage(bytes);
+  if (image == null) return original; // 解不出來就用原圖，不要整個失敗
+
+  if (image.width < 1600) {
+    image = img.copyResize(image, width: 1600, interpolation: img.Interpolation.cubic);
+  }
+  image = img.grayscale(image);
+  image = img.normalize(image, min: 0, max: 255);
+  image = img.contrast(image, contrast: 130);
+
+  final processedBytes = img.encodeJpg(image, quality: 95);
+  final tempDir = await Directory.systemTemp.createTemp('yiwallet_roster_ocr');
+  final outFile = File('${tempDir.path}/preprocessed.jpg');
+  await outFile.writeAsBytes(processedBytes);
+  return outFile;
+}
 
 /// 排班表照片的待處理清單。跟「銀行通知記帳」不同，這裡的 OCR 猜測一律導去
 /// [RosterReviewPage] 手動校正，沒有「一鍵入帳」自動路徑——表格辨識準確率
@@ -48,8 +73,9 @@ class RosterImportPage extends HookConsumerWidget {
       recognizing.value = true;
       message.value = null;
       try {
+        final preprocessed = await _preprocessForOcr(file);
         final recognizer = TextRecognizer(script: TextRecognitionScript.chinese);
-        final result = await recognizer.processImage(InputImage.fromFilePath(file.path));
+        final result = await recognizer.processImage(InputImage.fromFilePath(preprocessed.path));
         await recognizer.close();
         final guess = parseRosterTableFromRecognizedText(result);
 
