@@ -51,7 +51,7 @@ class RosterImportPage extends HookConsumerWidget {
         final recognizer = TextRecognizer(script: TextRecognitionScript.chinese);
         final result = await recognizer.processImage(InputImage.fromFilePath(file.path));
         await recognizer.close();
-        final guess = parseRosterTable(result.text);
+        final guess = parseRosterTableFromRecognizedText(result);
 
         if (!context.mounted) return;
         final imported = await Navigator.of(context).push<bool>(
