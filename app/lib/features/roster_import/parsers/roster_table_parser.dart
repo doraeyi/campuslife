@@ -145,52 +145,87 @@ RosterTableGuess _clusterGeometry(List<_PositionedLine> lines, int year) {
   // 表頭以外、而且要在表頭「下面」（Y 大於表頭）的行才是表格本體——店號/
   // 店名/列印日期這些表頭上方的行雖然沒跟表頭同一 Y 帶重疊，但也不是員工
   // 列，之前只排除「重疊表頭」漏掉了這些。
-  final bodyLines = lines.where((l) => l.box.top >= headerBottom).toList()
-    ..sort((a, b) => a.box.top.compareTo(b.box.top));
-  final rowClusters = _clusterByYOverlap(bodyLines, (l) => l.box);
+  final bodyLines = lines.where((l) => l.box.top >= headerBottom).toList();
 
-  final rows = <RosterRowGuess>[];
-  for (final cluster in rowClusters) {
-    final rowText = cluster.map((l) => l.text).join(' ');
-    if (_stopWords.any((w) => rowText.contains(w))) continue;
+  // 表格本體先分成「標籤區」（角色欄 + 姓名欄，X < 第一個日期欄左邊界）
+  // 跟「格子區」兩塊。每一列的身分完全交給標籤區裡的姓名決定——一個人
+  // 一列只會有一個姓名，比整列（姓名 + 一堆時間格）一起分群穩得多：之前
+  // 用全部行一起分群，格子太密集，容易讓兩個人的姓名被併成同一列。
+  final labelLines = bodyLines.where((l) => l.box.center.dx < labelZoneRight).toList();
+  final cellLines = bodyLines.where((l) => l.box.center.dx >= labelZoneRight).toList();
 
-    final sortedCluster = List.of(cluster)..sort((a, b) => a.box.left.compareTo(b.box.left));
-    final nameParts = <String>[];
-    final cellParts = List<List<String>>.generate(dates.length, (_) => []);
+  final nameLines = <_PositionedLine>[];
+  for (final line in labelLines) {
+    // 角色欄（PT/PM/P/PI 這種純英文代碼）跟表格框線誤判成的雜訊字元都
+    // 沒有中文字，直接濾掉；只取中文字元本身，不管前後黏著什麼雜訊。
+    final cjk = RegExp(r'[一-鿿]+').allMatches(line.text).map((m) => m.group(0)!).join();
+    if (cjk.isNotEmpty) nameLines.add(_PositionedLine(cjk, line.box));
+  }
+  if (nameLines.isEmpty) return const RosterTableGuess(dates: [], rows: []);
 
-    for (final line in sortedCluster) {
-      final x = line.box.center.dx;
-      if (x < labelZoneRight) {
-        // 標籤區：角色欄（PT/PM/P/PI 這種純英文代碼）跟姓名欄都會落在
-        // 這裡。只取中文字元本身，角色代碼跟表格框線常被誤判成的雜訊
-        // 字元（例如行首的「1」「|」）都直接丟掉，不要整段文字照留。
-        for (final m in RegExp(r'[一-鿿]+').allMatches(line.text)) {
-          nameParts.add(m.group(0)!);
-        }
-        continue;
-      }
-      var nearestIdx = 0;
-      var nearestDist = (x - dateColX[0]).abs();
-      for (var i = 1; i < dateColX.length; i++) {
-        final d = (x - dateColX[i]).abs();
-        if (d < nearestDist) {
-          nearestDist = d;
-          nearestIdx = i;
-        }
-      }
-      // 日期欄要套距離篩選，用來濾掉代班/特休/備註/合計等尾端彙總欄位。
-      if (nearestDist <= avgSpacing * 0.6) {
-        cellParts[nearestIdx].add(line.text);
+  // 姓名行彼此分群（同一人的姓名如果被拆成兩行會併回來），每一群就是一列。
+  final nameLinesByTop = List.of(nameLines)..sort((a, b) => a.box.top.compareTo(b.box.top));
+  final nameGroups = _clusterByYOverlap(nameLinesByTop, (l) => l.box);
+
+  final rowAnchors = nameGroups.map((group) {
+    final name = (List.of(group)..sort((a, b) => a.box.left.compareTo(b.box.left)))
+        .map((l) => l.text)
+        .join();
+    final centerY = group.map((l) => l.box.center.dy).reduce((a, b) => a + b) / group.length;
+    return (name: name, y: centerY);
+  }).toList()
+    ..sort((a, b) => a.y.compareTo(b.y));
+
+  double avgRowSpacing = double.infinity; // 只有一列時沒有間距可算，不套距離篩選
+  if (rowAnchors.length >= 2) {
+    var totalGap = 0.0;
+    for (var i = 1; i < rowAnchors.length; i++) {
+      totalGap += rowAnchors[i].y - rowAnchors[i - 1].y;
+    }
+    avgRowSpacing = totalGap / (rowAnchors.length - 1);
+  }
+
+  final cellPartsByRow = List.generate(rowAnchors.length, (_) => List<List<String>>.generate(dates.length, (_) => []));
+  for (final line in cellLines) {
+    // 每一格依 Y 座標指派給最近的列——跟依 X 座標指派日期欄是同一套邏輯。
+    var nearestRow = 0;
+    var nearestRowDist = (line.box.center.dy - rowAnchors[0].y).abs();
+    for (var r = 1; r < rowAnchors.length; r++) {
+      final d = (line.box.center.dy - rowAnchors[r].y).abs();
+      if (d < nearestRowDist) {
+        nearestRowDist = d;
+        nearestRow = r;
       }
     }
+    if (nearestRowDist > avgRowSpacing * 0.6) continue; // 離每一列都太遠，當雜訊丟棄
 
-    final name = nameParts.join('').trim();
+    final x = line.box.center.dx;
+    var nearestCol = 0;
+    var nearestColDist = (x - dateColX[0]).abs();
+    for (var c = 1; c < dateColX.length; c++) {
+      final d = (x - dateColX[c]).abs();
+      if (d < nearestColDist) {
+        nearestColDist = d;
+        nearestCol = c;
+      }
+    }
+    // 日期欄要套距離篩選，用來濾掉代班/特休/備註/合計等尾端彙總欄位。
+    if (nearestColDist <= avgSpacing * 0.6) {
+      cellPartsByRow[nearestRow][nearestCol].add(line.text);
+    }
+  }
+
+  final rows = <RosterRowGuess>[];
+  for (var r = 0; r < rowAnchors.length; r++) {
+    final name = rowAnchors[r].name.trim();
     if (name.isEmpty) continue;
+    if (_stopWords.any((w) => name.contains(w))) continue;
 
     final cells = List<String?>.filled(dates.length, null);
     for (var col = 0; col < dates.length; col++) {
-      if (cellParts[col].isEmpty) continue;
-      final m = _cellToken.firstMatch(cellParts[col].join(' '));
+      final parts = cellPartsByRow[r][col];
+      if (parts.isEmpty) continue;
+      final m = _cellToken.firstMatch(parts.join(' '));
       if (m == null) continue;
       cells[col] = m.group(3) != null ? null : '${m.group(1)}-${m.group(2)}';
     }

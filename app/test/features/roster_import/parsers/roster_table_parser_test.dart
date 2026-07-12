@@ -100,6 +100,41 @@ void main() {
     expect(guess.rows.any((r) => r.employeeName.contains('合計')), isFalse);
   });
 
+  test('列的分界只看姓名行，密集的格子資料不會讓兩個人被併成同一列', () {
+    // 這是真實照片踩到的那個 bug 的最小重現：兩個人的姓名行 Y 範圍緊貼在
+    // 一起（3px 間隔，沒有重疊），中間夾了一堆密集的格子資料——姓名分群
+    // 現在只看姓名行本身，不會被格子的密度影響。
+    final lines = <TextLine>[
+      _line('07/13(一)', const Rect.fromLTWH(100, 90, 60, 20)),
+      _line('07/14(二)', const Rect.fromLTWH(200, 90, 60, 20)),
+
+      _line('育傑', const Rect.fromLTWH(20, 150, 60, 20)), // top=150, bottom=170
+      _line('0700-1500', const Rect.fromLTWH(90, 150, 60, 20)),
+      _line('1500-2300', const Rect.fromLTWH(190, 150, 60, 20)),
+      _line('0.0', const Rect.fromLTWH(90, 165, 20, 15)),
+      _line('0.0', const Rect.fromLTWH(190, 165, 20, 15)),
+
+      _line('彥彬', const Rect.fromLTWH(20, 173, 60, 20)), // top=173，跟上面只差 3px
+      _line('1900-2300', const Rect.fromLTWH(90, 173, 60, 20)),
+      _line('-', const Rect.fromLTWH(190, 173, 20, 20)),
+    ];
+
+    final recognized = RecognizedText(
+      text: lines.map((l) => l.text).join('\n'),
+      blocks: [_block(lines)],
+    );
+
+    final guess = parseRosterTableFromRecognizedText(recognized, referenceYear: 2026);
+
+    expect(guess.rows.length, 2);
+    final yuJie = guess.rows.firstWhere((r) => r.employeeName == '育傑');
+    expect(yuJie.cells[0], '0700-1500');
+    expect(yuJie.cells[1], '1500-2300');
+    final yenBin = guess.rows.firstWhere((r) => r.employeeName == '彥彬');
+    expect(yenBin.cells[0], '1900-2300');
+    expect(yenBin.cells[1], isNull);
+  });
+
   test('完全沒有座標可用時，退回純文字解析', () {
     const rawText = '07/13(一) 07/14(二)\n小明 0700-1500 -\n';
     final recognized = RecognizedText(text: rawText, blocks: const []);
