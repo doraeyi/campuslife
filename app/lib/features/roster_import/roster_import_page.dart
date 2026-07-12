@@ -14,89 +14,25 @@ import 'parsers/roster_table_parser.dart';
 import 'providers/roster_pending_provider.dart';
 import 'roster_review_page.dart';
 
-/// 排班表照片辨識前的前處理：實測發現手機直接拍的照片（沒特別裁切/沒用
-/// 掃描 App）在這種密集小字印刷表格上，OCR 辨識率非常差（姓名、大部分
-/// 時間格幾乎整批讀不到）。這裡在辨識前自動做「掃描文件」App 那種強化—
-/// 灰階、自動拉滿對比（處理拍照光線不均）、適度加對比、太小就放大——
-/// 不需要使用者改變拍照/傳照片的方式，同一套 LINE 轉傳流程照舊。
+/// 排班表照片辨識前唯一必要的處理：把 EXIF 方向「烤」進像素資料。手機拍的
+/// 照片常常是用 EXIF 方向標記記錄「要轉幾度看才是正的」，解出來的像素資料
+/// 本身不會自動轉正——如果圖片實際上是橫躺/顛倒的卻沒轉正就送去辨識，OCR
+/// 的版面分析（怎麼把字組成行、行怎麼分群）會整個亂掉，這能解釋為什麼日期
+/// 這種短數字偶爾還讀得到、但姓名/整段文字幾乎全部消失（同一張照片用手機
+/// 系統內建的文字掃描完全讀得出來，證明照片本身解析度沒問題，問題出在這裡
+/// 沒有處理方向）。之前加的灰階/對比/裁切放大都是猜測性的，這次先拿掉，把
+/// 變因降到最低，只留這一步。
 Future<File> _preprocessForOcr(File original) async {
   final bytes = await original.readAsBytes();
-  var image = img.decodeImage(bytes);
-  if (image == null) return original; // 解不出來就用原圖，不要整個失敗
+  final decoded = img.decodeImage(bytes);
+  if (decoded == null) return original; // 解不出來就用原圖，不要整個失敗
 
-  if (image.width < 1600) {
-    image = img.copyResize(image, width: 1600, interpolation: img.Interpolation.cubic);
-  }
-  image = img.grayscale(image);
-  image = img.normalize(image, min: 0, max: 255);
-  image = img.contrast(image, contrast: 130);
+  final oriented = img.bakeOrientation(decoded);
 
-  final processedBytes = img.encodeJpg(image, quality: 95);
   final tempDir = await Directory.systemTemp.createTemp('yiwallet_roster_ocr');
   final outFile = File('${tempDir.path}/preprocessed.jpg');
-  await outFile.writeAsBytes(processedBytes);
+  await outFile.writeAsBytes(img.encodeJpg(oriented, quality: 95));
   return outFile;
-}
-
-/// 跑兩次辨識：第一次在強化過的整張照片上跑，如果抓到的文字涵蓋範圍明顯
-/// 小於整張照片（代表桌面/背景占了不少畫面，表格本身分到的有效解析度不
-/// 夠），就把照片裁到只剩「第一次抓到的文字範圍」再放大，重新辨識一次，
-/// 兩次結果取抓到比較多行的那個。不需要使用者自己裁圖或換拍照方式。
-Future<RecognizedText> _recognizeWithAutoCrop(File original) async {
-  final recognizer = TextRecognizer(script: TextRecognitionScript.chinese);
-  try {
-    final preprocessed = await _preprocessForOcr(original);
-    final firstPass = await recognizer.processImage(InputImage.fromFilePath(preprocessed.path));
-
-    final firstLines = <TextLine>[
-      for (final block in firstPass.blocks) for (final line in block.lines) line,
-    ];
-    // 抓到的東西太少，裁切基準本身就不可靠，直接用第一次的結果。
-    if (firstLines.length < 5) return firstPass;
-
-    final bytes = await preprocessed.readAsBytes();
-    final decoded = img.decodeImage(bytes);
-    if (decoded == null) return firstPass;
-
-    final minX = firstLines.map((l) => l.boundingBox.left).reduce((a, b) => a < b ? a : b);
-    final minY = firstLines.map((l) => l.boundingBox.top).reduce((a, b) => a < b ? a : b);
-    final maxX = firstLines.map((l) => l.boundingBox.right).reduce((a, b) => a > b ? a : b);
-    final maxY = firstLines.map((l) => l.boundingBox.bottom).reduce((a, b) => a > b ? a : b);
-
-    final w = decoded.width.toDouble();
-    final h = decoded.height.toDouble();
-    final coverage = ((maxX - minX) * (maxY - minY)) / (w * h);
-    if (coverage > 0.75) return firstPass; // 涵蓋範圍已經很大，裁切效益不大
-
-    final padX = (maxX - minX) * 0.25;
-    final padY = (maxY - minY) * 0.4; // 下方多留一些——表格本體常常在偵測到的表頭下面
-    final cropLeft = (minX - padX).clamp(0, w).round();
-    final cropTop = (minY - padY).clamp(0, h).round();
-    final cropRight = (maxX + padX).clamp(0, w).round();
-    final cropBottom = (maxY + padY).clamp(0, h).round();
-
-    var cropped = img.copyCrop(
-      decoded,
-      x: cropLeft,
-      y: cropTop,
-      width: cropRight - cropLeft,
-      height: cropBottom - cropTop,
-    );
-    if (cropped.width < 1600) {
-      cropped = img.copyResize(cropped, width: 1600, interpolation: img.Interpolation.cubic);
-    }
-
-    final tempDir = await Directory.systemTemp.createTemp('yiwallet_roster_ocr_crop');
-    final croppedFile = File('${tempDir.path}/cropped.jpg');
-    await croppedFile.writeAsBytes(img.encodeJpg(cropped, quality: 95));
-
-    final secondPass = await recognizer.processImage(InputImage.fromFilePath(croppedFile.path));
-    final secondLineCount =
-        secondPass.blocks.fold<int>(0, (sum, b) => sum + b.lines.length);
-    return secondLineCount > firstLines.length ? secondPass : firstPass;
-  } finally {
-    await recognizer.close();
-  }
 }
 
 /// 排班表照片的待處理清單。跟「銀行通知記帳」不同，這裡的 OCR 猜測一律導去
@@ -134,7 +70,10 @@ class RosterImportPage extends HookConsumerWidget {
       recognizing.value = true;
       message.value = null;
       try {
-        final result = await _recognizeWithAutoCrop(file);
+        final preprocessed = await _preprocessForOcr(file);
+        final recognizer = TextRecognizer(script: TextRecognitionScript.chinese);
+        final result = await recognizer.processImage(InputImage.fromFilePath(preprocessed.path));
+        await recognizer.close();
         final guess = parseRosterTableFromRecognizedText(result);
 
         if (!context.mounted) return;
