@@ -43,3 +43,12 @@ kotlin {
 flutter {
     source = "../.."
 }
+
+dependencies {
+    // google_mlkit_text_recognition 的中文模型是選用的（外掛只宣告
+    // compileOnly），consuming app 要自己補上才會真的被打包進去，不然
+    // Dart 端寫 TextRecognitionScript.chinese 也只會退回內建的拉丁字母
+    // 模型，中文字幾乎全部辨識不到。版本要跟外掛 android/build.gradle
+    // 裡宣告的 text-recognition 版本一致（16.0.1），避免版本衝突。
+    implementation("com.google.mlkit:text-recognition-chinese:16.0.1")
+}

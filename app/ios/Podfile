@@ -32,6 +32,13 @@ target 'Runner' do
   use_frameworks!
   use_modular_headers!
 
+  # google_mlkit_text_recognition 只內建拉丁字母模型，中文（TextRecognitionScript.chinese）
+  # 要另外明確加這個 pod 才會真的被打包進去，不然 Dart 端寫了 script: .chinese 也只會
+  # 靜默退回拉丁字母模型，中文字幾乎全部辨識不到（只剩數字/符號能勉強讀到）。版本要跟
+  # 外掛 podspec 裡宣告的 GoogleMLKit/TextRecognition 版本一致（~> 7.0.0），避免 pod
+  # install 版本衝突。
+  pod 'GoogleMLKit/TextRecognitionChinese', '~> 7.0.0'
+
   flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
   target 'RunnerTests' do
     inherit! :search_paths
