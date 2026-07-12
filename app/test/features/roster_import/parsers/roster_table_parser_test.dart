@@ -51,13 +51,21 @@ void main() {
       // 尾端彙總欄位（代班/特休/合計），X 遠超過最後一欄，不該被當成 07/18 的資料
       _line('0.0', const Rect.fromLTWH(850, 200, 20, 20)),
 
-      // 第二位員工，測多列都能分開處理
+      // 第二位員工，姓名前面黏著表格框線被誤判成的雜訊字元「|」，測濾除
+      // 雜訊只留中文字元。
       _line('PT', const Rect.fromLTWH(0, 260, 20, 20)),
-      _line('昇平', const Rect.fromLTWH(30, 260, 60, 20)),
+      _line('|昇平', const Rect.fromLTWH(30, 260, 60, 20)),
       _line('1500-2300', const Rect.fromLTWH(390, 260, 70, 20)), // 07/16
 
+      // 第三位員工，Y 範圍跟上一列完全沒有重疊——測分群不會因為之前用「整
+      // 群邊界」比對而把這種明顯是不同列的行誤併進去（改成跟群裡實際存在
+      // 的行個別比對之後才修好的那個 bug）。
+      _line('PT', const Rect.fromLTWH(0, 285, 20, 20)),
+      _line('俊佑', const Rect.fromLTWH(30, 285, 60, 20)),
+      _line('1500-2300', const Rect.fromLTWH(390, 285, 70, 20)), // 07/16
+
       // 應該被整列跳過的彙總列
-      _line('合計工時 32.0 44.0', const Rect.fromLTWH(0, 320, 200, 20)),
+      _line('合計工時 32.0 44.0', const Rect.fromLTWH(0, 340, 200, 20)),
     ];
 
     final recognized = RecognizedText(
@@ -73,9 +81,9 @@ void main() {
       ['7/13', '7/14', '7/15', '7/16', '7/17', '7/18', '7/19'],
     );
 
-    // 只有兩個真正的員工列——表頭上方的店號列、角色欄的「PT」代碼、彙總
-    // 列都不該冒出額外的列。
-    expect(guess.rows.length, 2);
+    // 三個真正的員工列都要分開——表頭上方的店號列、角色欄的「PT」代碼、
+    // 彙總列都不該冒出額外的列，第二、三位員工也不該被誤併成同一列。
+    expect(guess.rows.length, 3);
 
     final peiJhen = guess.rows.firstWhere((r) => r.employeeName == '珮甄');
     expect(peiJhen.cells[0], '0700-1500'); // 07/13，兩行合併
@@ -84,7 +92,10 @@ void main() {
     expect(peiJhen.cells[6], isNull); // 07/18：尾端雜訊沒有污染這一欄
 
     final shengPing = guess.rows.firstWhere((r) => r.employeeName == '昇平');
-    expect(shengPing.cells[3], '1500-2300'); // 07/16
+    expect(shengPing.cells[3], '1500-2300'); // 07/16，姓名前的「|」雜訊被濾掉
+
+    final junYou = guess.rows.firstWhere((r) => r.employeeName == '俊佑');
+    expect(junYou.cells[3], '1500-2300'); // 07/16，跟「昇平」那一列沒有被併在一起
 
     expect(guess.rows.any((r) => r.employeeName.contains('合計')), isFalse);
   });

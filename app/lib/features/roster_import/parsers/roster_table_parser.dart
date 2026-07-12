@@ -60,19 +60,27 @@ class _DateHit {
 /// 依 Y 軸區間是否重疊分群（同一列的姓名跟時間格常常因為字型高度/基準線
 /// 不同而中心點對不齊，用區間重疊比固定容忍值的中心點距離穩）。輸入需先
 /// 依 top 排序過。
+///
+/// 判斷「這一行屬於哪一群」時，是跟群裡「實際存在的每一行」個別比對重疊，
+/// 不是跟整群目前的邊界（min top ~ max top）比對——用整群邊界的話，群會
+/// 越併越高，導致後面明明是下一列的行也被判定成「跟這個越來越高的範圍
+/// 重疊」而誤併，之前實測真的發生過兩個人被併成同一列。
 List<List<T>> _clusterByYOverlap<T>(List<T> sortedByTop, Rect Function(T) boxOf) {
   final clusters = <List<T>>[];
   for (final item in sortedByTop) {
-    if (clusters.isNotEmpty) {
-      final cluster = clusters.last;
-      final top = cluster.map((c) => boxOf(c).top).reduce((a, b) => a < b ? a : b);
-      final bottom = cluster.map((c) => boxOf(c).bottom).reduce((a, b) => a > b ? a : b);
-      if (boxOf(item).top < bottom && boxOf(item).bottom > top) {
-        cluster.add(item);
-        continue;
-      }
+    final itemBox = boxOf(item);
+    final matched = clusters.reversed.firstWhere(
+      (cluster) => cluster.any((c) {
+        final cBox = boxOf(c);
+        return itemBox.top < cBox.bottom && itemBox.bottom > cBox.top;
+      }),
+      orElse: () => const [],
+    );
+    if (matched.isNotEmpty) {
+      matched.add(item);
+    } else {
+      clusters.add([item]);
     }
-    clusters.add([item]);
   }
   return clusters;
 }
@@ -154,9 +162,10 @@ RosterTableGuess _clusterGeometry(List<_PositionedLine> lines, int year) {
       final x = line.box.center.dx;
       if (x < labelZoneRight) {
         // 標籤區：角色欄（PT/PM/P/PI 這種純英文代碼）跟姓名欄都會落在
-        // 這裡，只留有非英數字元（中文姓名）的片段，把角色代碼濾掉。
-        if (RegExp(r'[^\x00-\x7F]').hasMatch(line.text)) {
-          nameParts.add(line.text);
+        // 這裡。只取中文字元本身，角色代碼跟表格框線常被誤判成的雜訊
+        // 字元（例如行首的「1」「|」）都直接丟掉，不要整段文字照留。
+        for (final m in RegExp(r'[一-鿿]+').allMatches(line.text)) {
+          nameParts.add(m.group(0)!);
         }
         continue;
       }
