@@ -35,9 +35,11 @@ def _create_roster_upload(
     preset_by_time = {(p.start_time, p.end_time): p.label for p in presets}
 
     for entry in payload.shifts:
-        shift_type = None
-        if entry.start_time and entry.end_time:
-            shift_type = preset_by_time.get((entry.start_time, entry.end_time))
+        # 休假格（start/end 皆空）不用存進資料庫，只存實際有上班的日子，
+        # 查「誰上班」時本來就不會列出沒上班的人，不用另外塞休假紀錄。
+        if entry.start_time is None and entry.end_time is None:
+            continue
+        shift_type = preset_by_time.get((entry.start_time, entry.end_time))
         db.add(models.RosterShift(
             user_id=current_user.id,
             roster_upload_id=upload.id,

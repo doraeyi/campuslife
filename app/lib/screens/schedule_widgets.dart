@@ -107,6 +107,59 @@ class _DayBottomSheetState extends State<DayBottomSheet> {
     _loadRosterShifts();
   }
 
+  /// 把班別預設依「跟現在的關聯程度」排序：目前這班排第一個，接著是未來
+  /// 會輪到的班別；剛換班沒多久（60 分鐘內）大家還是會覺得上一班的人比較
+  /// 相關，這時候讓上一班排到最前面。
+  List<ShiftPreset> _rankedPresets(List<ShiftPreset> presets, DateTime now) {
+    if (presets.length <= 1) return presets;
+    const graceMinutes = 60;
+    final nowMinutes = now.hour * 60 + now.minute;
+
+    int startMinutes(ShiftPreset p) {
+      final parts = p.startTime.split(':');
+      return int.parse(parts[0]) * 60 + int.parse(parts[1]);
+    }
+
+    int elapsedSinceStart(ShiftPreset p) {
+      final diff = nowMinutes - startMinutes(p);
+      return diff < 0 ? diff + 24 * 60 : diff;
+    }
+
+    final sorted = List<ShiftPreset>.from(presets)
+      ..sort((a, b) => startMinutes(a).compareTo(startMinutes(b)));
+
+    var currentIndex = 0;
+    var minElapsed = elapsedSinceStart(sorted.first);
+    for (var i = 1; i < sorted.length; i++) {
+      final elapsed = elapsedSinceStart(sorted[i]);
+      if (elapsed < minElapsed) {
+        minElapsed = elapsed;
+        currentIndex = i;
+      }
+    }
+
+    final rotated = [
+      for (var i = 0; i < sorted.length; i++)
+        sorted[(currentIndex + i) % sorted.length],
+    ];
+
+    if (minElapsed < graceMinutes) {
+      rotated.insert(0, rotated.removeLast());
+    }
+    return rotated;
+  }
+
+  List<RosterShift> get _sortedRosterShifts {
+    final presets = _selectedJob?.presets ?? [];
+    if (presets.isEmpty) return _rosterShifts;
+    final order = _rankedPresets(presets, DateTime.now());
+    final rank = {for (var i = 0; i < order.length; i++) order[i].label: i};
+    final sorted = List<RosterShift>.from(_rosterShifts);
+    sorted.sort((a, b) => (rank[a.shiftType] ?? order.length)
+        .compareTo(rank[b.shiftType] ?? order.length));
+    return sorted;
+  }
+
   Future<void> _deleteShift(int shiftId) async {
     try {
       await _apiClient.deleteShift(shiftId);
@@ -255,7 +308,7 @@ class _DayBottomSheetState extends State<DayBottomSheet> {
                   Wrap(
                     spacing: 8,
                     runSpacing: 8,
-                    children: _rosterShifts.map((s) {
+                    children: _sortedRosterShifts.map((s) {
                       final off = s.startTime == null || s.endTime == null;
                       final label = off
                           ? '${s.employeeName} · 休'
