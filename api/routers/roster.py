@@ -191,16 +191,20 @@ def delete_roster_upload(
 def list_roster_shifts(
     start: date,
     end: date,
+    job_id: int | None = None,
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    return (
-        db.query(models.RosterShift)
-        .filter(
-            models.RosterShift.user_id == current_user.id,
-            models.RosterShift.date >= start,
-            models.RosterShift.date <= end,
-        )
-        .order_by(models.RosterShift.date, models.RosterShift.employee_name)
-        .all()
+    query = db.query(models.RosterShift).filter(
+        models.RosterShift.user_id == current_user.id,
+        models.RosterShift.date >= start,
+        models.RosterShift.date <= end,
     )
+    # job_id 沒有冗餘存在 RosterShift 上，只有篩選這個工作時才需要 join
+    # 回上傳批次去比對，平常按日期範圍查(整月行事曆)不用多這個 join。
+    if job_id is not None:
+        query = query.join(
+            models.RosterUpload,
+            models.RosterShift.roster_upload_id == models.RosterUpload.id,
+        ).filter(models.RosterUpload.job_id == job_id)
+    return query.order_by(models.RosterShift.date, models.RosterShift.employee_name).all()

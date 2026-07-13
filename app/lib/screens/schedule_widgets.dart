@@ -3,16 +3,33 @@ import 'package:flutter/material.dart';
 import '../data/shift_type_colors.dart';
 import '../data/taiwan_holidays_2026.dart';
 import '../models/job.dart';
+import '../models/roster.dart';
 import '../models/shift.dart';
 import '../services/api_client.dart';
 import '../services/notification_service.dart';
 import 'add_shift_screen.dart';
 
 const shiftPresets = [
-  (label: '早班', start: TimeOfDay(hour: 8, minute: 0), end: TimeOfDay(hour: 16, minute: 0)),
-  (label: '午班', start: TimeOfDay(hour: 13, minute: 0), end: TimeOfDay(hour: 21, minute: 0)),
-  (label: '晚班', start: TimeOfDay(hour: 17, minute: 0), end: TimeOfDay(hour: 22, minute: 0)),
-  (label: '大夜', start: TimeOfDay(hour: 22, minute: 0), end: TimeOfDay(hour: 6, minute: 0)),
+  (
+    label: '早班',
+    start: TimeOfDay(hour: 8, minute: 0),
+    end: TimeOfDay(hour: 16, minute: 0)
+  ),
+  (
+    label: '午班',
+    start: TimeOfDay(hour: 13, minute: 0),
+    end: TimeOfDay(hour: 21, minute: 0)
+  ),
+  (
+    label: '晚班',
+    start: TimeOfDay(hour: 17, minute: 0),
+    end: TimeOfDay(hour: 22, minute: 0)
+  ),
+  (
+    label: '大夜',
+    start: TimeOfDay(hour: 22, minute: 0),
+    end: TimeOfDay(hour: 6, minute: 0)
+  ),
 ];
 
 String fmtTime(TimeOfDay t) =>
@@ -31,6 +48,7 @@ class DayBottomSheet extends StatefulWidget {
     required this.jobs,
     required this.isViewingSelf,
     required this.onAdded,
+    this.initialJob,
   });
 
   final DateTime date;
@@ -38,6 +56,7 @@ class DayBottomSheet extends StatefulWidget {
   final List<Job> jobs;
   final bool isViewingSelf;
   final VoidCallback onAdded;
+  final Job? initialJob;
 
   @override
   State<DayBottomSheet> createState() => _DayBottomSheetState();
@@ -48,10 +67,44 @@ class _DayBottomSheetState extends State<DayBottomSheet> {
   bool _saving = false;
   Job? _selectedJob;
 
+  List<RosterShift> _rosterShifts = [];
+  bool _rosterLoading = false;
+
   @override
   void initState() {
     super.initState();
-    _selectedJob = widget.jobs.isNotEmpty ? widget.jobs.first : null;
+    final initial = widget.initialJob != null &&
+            widget.jobs.any((j) => j.id == widget.initialJob!.id)
+        ? widget.initialJob
+        : null;
+    _selectedJob =
+        initial ?? (widget.jobs.isNotEmpty ? widget.jobs.first : null);
+    _loadRosterShifts();
+  }
+
+  Future<void> _loadRosterShifts() async {
+    if (_selectedJob == null) {
+      setState(() => _rosterShifts = []);
+      return;
+    }
+    setState(() => _rosterLoading = true);
+    try {
+      final shifts = await _apiClient.fetchRosterShifts(
+        widget.date,
+        widget.date,
+        jobId: _selectedJob!.id,
+      );
+      if (mounted) setState(() => _rosterShifts = shifts);
+    } catch (_) {
+      if (mounted) setState(() => _rosterShifts = []);
+    } finally {
+      if (mounted) setState(() => _rosterLoading = false);
+    }
+  }
+
+  void _selectJob(Job job) {
+    setState(() => _selectedJob = job);
+    _loadRosterShifts();
   }
 
   Future<void> _deleteShift(int shiftId) async {
@@ -61,7 +114,9 @@ class _DayBottomSheetState extends State<DayBottomSheet> {
       widget.onAdded();
       if (mounted) Navigator.pop(context);
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('刪除失敗:$e')));
+      if (mounted)
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('刪除失敗:$e')));
     }
   }
 
@@ -80,7 +135,9 @@ class _DayBottomSheetState extends State<DayBottomSheet> {
       widget.onAdded();
       if (mounted) Navigator.pop(context);
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('失敗:$e')));
+      if (mounted)
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('失敗:$e')));
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -99,7 +156,9 @@ class _DayBottomSheetState extends State<DayBottomSheet> {
       widget.onAdded();
       if (mounted) Navigator.pop(context);
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('失敗:$e')));
+      if (mounted)
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('失敗:$e')));
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -107,64 +166,42 @@ class _DayBottomSheetState extends State<DayBottomSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final dateStr = '${widget.date.year}/${widget.date.month}/${widget.date.day}';
+    final dateStr =
+        '${widget.date.year}/${widget.date.month}/${widget.date.day}';
     final holiday = holidayNameFor(widget.date);
 
     return SafeArea(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Text(dateStr, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
-                if (holiday != null) ...[
-                  const SizedBox(width: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: Colors.red.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(8),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Text(dateStr,
+                      style: const TextStyle(
+                          fontWeight: FontWeight.bold, fontSize: 17)),
+                  if (holiday != null) ...[
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.red.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(holiday,
+                          style:
+                              const TextStyle(color: Colors.red, fontSize: 12)),
                     ),
-                    child: Text(holiday, style: const TextStyle(color: Colors.red, fontSize: 12)),
-                  ),
+                  ],
                 ],
-              ],
-            ),
-            const SizedBox(height: 12),
-            if (widget.shifts.isNotEmpty)
-              ...widget.shifts.map((shift) => ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: CircleAvatar(backgroundColor: shift.job?.color ?? Colors.grey, radius: 8),
-                    title: Text('${shift.startTime.substring(0, 5)} - ${shift.endTime.substring(0, 5)}'),
-                    subtitle: shift.job != null ? Text(shift.job!.name) : null,
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (shift.shiftType != null)
-                          Chip(
-                            label: Text(shift.shiftType!),
-                            backgroundColor: colorForShiftType(shift.shiftType),
-                            labelStyle: const TextStyle(color: Colors.white, fontSize: 11),
-                            side: BorderSide.none,
-                            visualDensity: VisualDensity.compact,
-                          ),
-                        if (widget.isViewingSelf)
-                          IconButton(
-                            icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20),
-                            onPressed: () => _deleteShift(shift.id),
-                          ),
-                      ],
-                    ),
-                  )),
-            if (widget.isViewingSelf) ...[
-              if (widget.shifts.isNotEmpty) const Divider(),
-              const Text('快速新增', style: TextStyle(fontWeight: FontWeight.w600)),
-              const SizedBox(height: 8),
+              ),
+              const SizedBox(height: 12),
 
-              // ── 工作選擇器 ────────────────────────────────────────────
+              // ── 工作選擇器(切換要看哪個工作地點的同事班表)──────────────
               if (widget.jobs.isNotEmpty) ...[
                 SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
@@ -180,7 +217,7 @@ class _DayBottomSheetState extends State<DayBottomSheet> {
                             backgroundColor: job.color,
                             radius: 8,
                           ),
-                          onSelected: (_) => setState(() => _selectedJob = job),
+                          onSelected: (_) => _selectJob(job),
                           selectedColor: job.color.withValues(alpha: 0.2),
                           side: selected
                               ? BorderSide(color: job.color, width: 1.5)
@@ -190,60 +227,168 @@ class _DayBottomSheetState extends State<DayBottomSheet> {
                     }).toList(),
                   ),
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 12),
+
+                // ── 誰上班 ──────────────────────────────────────────────
+                const Text('誰上班',
+                    style: TextStyle(fontWeight: FontWeight.w600)),
+                const SizedBox(height: 8),
+                if (_rosterLoading)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 8),
+                    child: Center(
+                      child: SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2)),
+                    ),
+                  )
+                else if (_rosterShifts.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Text('這個工作還沒有匯入這天的班表',
+                        style: TextStyle(
+                            color: Theme.of(context).colorScheme.outline,
+                            fontSize: 13)),
+                  )
+                else
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: _rosterShifts.map((s) {
+                      final off = s.startTime == null || s.endTime == null;
+                      final label = off
+                          ? '${s.employeeName} · 休'
+                          : '${s.employeeName} · ${s.shiftType ?? '${s.startTime}-${s.endTime}'}';
+                      return Chip(
+                        label:
+                            Text(label, style: const TextStyle(fontSize: 12)),
+                        backgroundColor: off
+                            ? null
+                            : (colorForShiftType(s.shiftType) ??
+                                    _selectedJob?.color)
+                                ?.withValues(alpha: 0.15),
+                        side: BorderSide.none,
+                        visualDensity: VisualDensity.compact,
+                      );
+                    }).toList(),
+                  ),
+                const SizedBox(height: 12),
+                const Divider(),
               ],
 
-              // ── 班別快捷 ──────────────────────────────────────────────
-              Builder(builder: (context) {
-                final jobPresets = _selectedJob?.presets ?? [];
-                if (jobPresets.isNotEmpty) {
-                  // 顯示工作自訂班別
+              const Text('我的班次', style: TextStyle(fontWeight: FontWeight.w600)),
+              const SizedBox(height: 8),
+              if (widget.shifts.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Text('這天還沒有排班',
+                      style: TextStyle(
+                          color: Theme.of(context).colorScheme.outline,
+                          fontSize: 13)),
+                ),
+              if (widget.shifts.isNotEmpty)
+                ...widget.shifts.map((shift) => ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: CircleAvatar(
+                          backgroundColor: shift.job?.color ?? Colors.grey,
+                          radius: 8),
+                      title: Text(
+                          '${shift.startTime.substring(0, 5)} - ${shift.endTime.substring(0, 5)}'),
+                      subtitle:
+                          shift.job != null ? Text(shift.job!.name) : null,
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (shift.shiftType != null)
+                            Chip(
+                              label: Text(shift.shiftType!),
+                              backgroundColor:
+                                  colorForShiftType(shift.shiftType),
+                              labelStyle: const TextStyle(
+                                  color: Colors.white, fontSize: 11),
+                              side: BorderSide.none,
+                              visualDensity: VisualDensity.compact,
+                            ),
+                          if (widget.isViewingSelf)
+                            IconButton(
+                              icon: const Icon(Icons.delete_outline,
+                                  color: Colors.red, size: 20),
+                              onPressed: () => _deleteShift(shift.id),
+                            ),
+                        ],
+                      ),
+                    )),
+              if (widget.isViewingSelf) ...[
+                const Divider(),
+                const Text('快速新增',
+                    style: TextStyle(fontWeight: FontWeight.w600)),
+                const SizedBox(height: 8),
+
+                // ── 班別快捷 ──────────────────────────────────────────────
+                Builder(builder: (context) {
+                  final jobPresets = _selectedJob?.presets ?? [];
+                  if (jobPresets.isNotEmpty) {
+                    // 顯示工作自訂班別
+                    return Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: jobPresets.map((p) {
+                        final chipColor = _selectedJob?.color ?? Colors.grey;
+                        return ActionChip(
+                          label: Text(
+                            '${p.label}  ${p.displayStart}-${p.displayEnd}',
+                            style: const TextStyle(
+                                color: Colors.white, fontSize: 12),
+                          ),
+                          backgroundColor: chipColor,
+                          onPressed: _saving ? null : () => _quickAddPreset(p),
+                          avatar: Icon(Icons.add,
+                              color: Colors.white.withValues(alpha: 0.8),
+                              size: 14),
+                        );
+                      }).toList(),
+                    );
+                  }
+                  // 無自訂班別 → 顯示預設班別
                   return Wrap(
                     spacing: 8,
                     runSpacing: 8,
-                    children: jobPresets.map((p) {
-                      final chipColor = _selectedJob?.color ?? Colors.grey;
+                    children: shiftPresets.map((p) {
+                      final chipColor =
+                          colorForShiftType(p.label) ?? Colors.grey;
                       return ActionChip(
-                        label: Text(
-                          '${p.label}  ${p.displayStart}-${p.displayEnd}',
-                          style: const TextStyle(color: Colors.white, fontSize: 12),
-                        ),
+                        label: Text(p.label,
+                            style: const TextStyle(color: Colors.white)),
                         backgroundColor: chipColor,
-                        onPressed: _saving ? null : () => _quickAddPreset(p),
-                        avatar: Icon(Icons.add, color: Colors.white.withValues(alpha: 0.8), size: 14),
+                        onPressed: _saving
+                            ? null
+                            : () => _quickAdd(p.label, p.start, p.end),
+                        avatar: Icon(Icons.add,
+                            color: Colors.white.withValues(alpha: 0.8),
+                            size: 16),
                       );
                     }).toList(),
                   );
-                }
-                // 無自訂班別 → 顯示預設班別
-                return Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: shiftPresets.map((p) {
-                    final chipColor = colorForShiftType(p.label) ?? Colors.grey;
-                    return ActionChip(
-                      label: Text(p.label, style: const TextStyle(color: Colors.white)),
-                      backgroundColor: chipColor,
-                      onPressed: _saving ? null : () => _quickAdd(p.label, p.start, p.end),
-                      avatar: Icon(Icons.add, color: Colors.white.withValues(alpha: 0.8), size: 16),
-                    );
-                  }).toList(),
-                );
-              }),
-              const SizedBox(height: 8),
-              TextButton.icon(
-                onPressed: () {
-                  Navigator.pop(context);
-                  Navigator.push(context, MaterialPageRoute(builder: (context) => const AddShiftScreen()))
-                      .then((added) {
-                    if (added == true) widget.onAdded();
-                  });
-                },
-                icon: const Icon(Icons.tune, size: 16),
-                label: const Text('自訂時間'),
-              ),
+                }),
+                const SizedBox(height: 8),
+                TextButton.icon(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                                builder: (context) => const AddShiftScreen()))
+                        .then((added) {
+                      if (added == true) widget.onAdded();
+                    });
+                  },
+                  icon: const Icon(Icons.tune, size: 16),
+                  label: const Text('自訂時間'),
+                ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );
@@ -296,7 +441,9 @@ class _BatchAddSheetState extends State<BatchAddSheet> {
       if (mounted) Navigator.pop(context);
       widget.onDone();
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('新增失敗:$e')));
+      if (mounted)
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('新增失敗:$e')));
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -312,7 +459,8 @@ class _BatchAddSheetState extends State<BatchAddSheet> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('批次新增 (共 ${widget.selectedDays.length} 天)',
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
+                style:
+                    const TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
             const SizedBox(height: 16),
             const Text('班別', style: TextStyle(fontWeight: FontWeight.w600)),
             const SizedBox(height: 8),
@@ -326,8 +474,10 @@ class _BatchAddSheetState extends State<BatchAddSheet> {
                     final selected = _shiftType == p.label;
                     final chipColor = _job?.color ?? Colors.grey;
                     return ChoiceChip(
-                      label: Text('${p.label}  ${p.displayStart}-${p.displayEnd}',
-                          style: TextStyle(color: selected ? Colors.white : null)),
+                      label: Text(
+                          '${p.label}  ${p.displayStart}-${p.displayEnd}',
+                          style:
+                              TextStyle(color: selected ? Colors.white : null)),
                       selected: selected,
                       selectedColor: chipColor,
                       onSelected: (_) => setState(() {
@@ -346,7 +496,9 @@ class _BatchAddSheetState extends State<BatchAddSheet> {
                   final selected = _shiftType == p.label;
                   final chipColor = colorForShiftType(p.label) ?? Colors.grey;
                   return ChoiceChip(
-                    label: Text(p.label, style: TextStyle(color: selected ? Colors.white : null)),
+                    label: Text(p.label,
+                        style:
+                            TextStyle(color: selected ? Colors.white : null)),
                     selected: selected,
                     selectedColor: chipColor,
                     onSelected: (_) => setState(() {
@@ -370,7 +522,8 @@ class _BatchAddSheetState extends State<BatchAddSheet> {
                     label: Text(j.name),
                     selected: selected,
                     selectedColor: j.color,
-                    labelStyle: TextStyle(color: selected ? Colors.white : null),
+                    labelStyle:
+                        TextStyle(color: selected ? Colors.white : null),
                     avatar: CircleAvatar(backgroundColor: j.color, radius: 6),
                     onSelected: (_) => setState(() {
                       _job = j;
@@ -383,9 +536,14 @@ class _BatchAddSheetState extends State<BatchAddSheet> {
             const SizedBox(height: 20),
             FilledButton(
               onPressed: _saving ? null : _save,
-              style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+              style: FilledButton.styleFrom(
+                  minimumSize: const Size.fromHeight(48)),
               child: _saving
-                  ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                  ? const SizedBox(
+                      height: 20,
+                      width: 20,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white))
                   : const Text('確認新增'),
             ),
           ],

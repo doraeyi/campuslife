@@ -20,7 +20,8 @@ import '../models/transaction.dart';
 import '../models/user.dart';
 
 class ApiClient {
-  static const String baseUrl = 'https://kaikaizhen.myasustor.com:1123/yiwallet';
+  static const String baseUrl =
+      'https://kaikaizhen.myasustor.com:1123/yiwallet';
 
   Future<Map<String, String>> _authHeaders() async {
     final prefs = await SharedPreferences.getInstance();
@@ -34,8 +35,10 @@ class ApiClient {
   // ── Shifts ───────────────────────────────────────────────────────────────
 
   Future<List<Shift>> fetchShifts() async {
-    final response = await http.get(Uri.parse('$baseUrl/schedule'), headers: await _authHeaders());
-    if (response.statusCode != 200) throw Exception('Failed to load shifts: ${response.statusCode}');
+    final response = await http.get(Uri.parse('$baseUrl/schedule'),
+        headers: await _authHeaders());
+    if (response.statusCode != 200)
+      throw Exception('Failed to load shifts: ${response.statusCode}');
     final List<dynamic> data = jsonDecode(response.body);
     return data.map((json) => Shift.fromJson(json)).toList();
   }
@@ -45,7 +48,8 @@ class ApiClient {
       Uri.parse('$baseUrl/schedule/friend/$friendUserId'),
       headers: await _authHeaders(),
     );
-    if (response.statusCode != 200) throw Exception('Failed to load friend shifts: ${response.statusCode}');
+    if (response.statusCode != 200)
+      throw Exception('Failed to load friend shifts: ${response.statusCode}');
     final List<dynamic> data = jsonDecode(response.body);
     return data.map((json) => FriendShift.fromJson(json)).toList();
   }
@@ -71,19 +75,23 @@ class ApiClient {
       headers: await _authHeaders(),
       body: body,
     );
-    if (response.statusCode != 200) throw Exception('Failed to create shift: ${response.statusCode}');
+    if (response.statusCode != 200)
+      throw Exception('Failed to create shift: ${response.statusCode}');
   }
 
   Future<void> deleteShift(int shiftId) async {
-    final response = await http.delete(Uri.parse('$baseUrl/schedule/$shiftId'), headers: await _authHeaders());
+    final response = await http.delete(Uri.parse('$baseUrl/schedule/$shiftId'),
+        headers: await _authHeaders());
     if (response.statusCode != 200) throw Exception('刪除班表失敗');
   }
 
   // ── Jobs ─────────────────────────────────────────────────────────────────
 
   Future<List<Job>> fetchJobs() async {
-    final response = await http.get(Uri.parse('$baseUrl/jobs'), headers: await _authHeaders());
-    if (response.statusCode != 200) throw Exception('Failed to load jobs: ${response.statusCode}');
+    final response = await http.get(Uri.parse('$baseUrl/jobs'),
+        headers: await _authHeaders());
+    if (response.statusCode != 200)
+      throw Exception('Failed to load jobs: ${response.statusCode}');
     final List<dynamic> data = jsonDecode(response.body);
     return data.map((json) => Job.fromJson(json)).toList();
   }
@@ -114,7 +122,8 @@ class ApiClient {
         'welfare_fee': welfareFee,
       }),
     );
-    if (response.statusCode != 200) throw Exception('Failed to create job: ${response.statusCode}');
+    if (response.statusCode != 200)
+      throw Exception('Failed to create job: ${response.statusCode}');
     return Job.fromJson(jsonDecode(response.body));
   }
 
@@ -150,18 +159,25 @@ class ApiClient {
   }
 
   Future<void> deleteJob(int jobId) async {
-    final response = await http.delete(Uri.parse('$baseUrl/jobs/$jobId'), headers: await _authHeaders());
+    final response = await http.delete(Uri.parse('$baseUrl/jobs/$jobId'),
+        headers: await _authHeaders());
     if (response.statusCode != 200) throw Exception('刪除工作失敗');
   }
 
-  Future<ShiftPreset> addShiftPreset(int jobId, String label, String startTime, String endTime) async {
+  Future<ShiftPreset> addShiftPreset(
+      int jobId, String label, String startTime, String endTime) async {
     final response = await http.post(
       Uri.parse('$baseUrl/jobs/$jobId/presets'),
       headers: await _authHeaders(),
-      body: jsonEncode({'label': label, 'start_time': '$startTime:00', 'end_time': '$endTime:00'}),
+      body: jsonEncode({
+        'label': label,
+        'start_time': '$startTime:00',
+        'end_time': '$endTime:00'
+      }),
     );
     if (response.statusCode != 200) throw Exception('新增班別失敗');
-    return ShiftPreset.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+    return ShiftPreset.fromJson(
+        jsonDecode(response.body) as Map<String, dynamic>);
   }
 
   Future<void> deleteShiftPreset(int jobId, int presetId) async {
@@ -175,9 +191,11 @@ class ApiClient {
   // ── User Profile ──────────────────────────────────────────────────────────
 
   Future<UserProfile> fetchMe() async {
-    final response = await http.get(Uri.parse('$baseUrl/users/me'), headers: await _authHeaders());
+    final response = await http.get(Uri.parse('$baseUrl/users/me'),
+        headers: await _authHeaders());
     if (response.statusCode != 200) throw Exception('載入個人資料失敗');
-    return UserProfile.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+    return UserProfile.fromJson(
+        jsonDecode(response.body) as Map<String, dynamic>);
   }
 
   Future<UserProfile> updateMe({String? name, String? picture}) async {
@@ -190,7 +208,8 @@ class ApiClient {
       body: jsonEncode(body),
     );
     if (response.statusCode != 200) throw Exception('更新個人資料失敗');
-    return UserProfile.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+    return UserProfile.fromJson(
+        jsonDecode(response.body) as Map<String, dynamic>);
   }
 
   Future<void> updateProfile({required String displayName}) async {
@@ -227,7 +246,8 @@ class ApiClient {
     final response = await http.patch(
       Uri.parse('$baseUrl/users/me/password'),
       headers: await _authHeaders(),
-      body: jsonEncode({'current_password': currentPassword, 'new_password': newPassword}),
+      body: jsonEncode(
+          {'current_password': currentPassword, 'new_password': newPassword}),
     );
     if (response.statusCode != 200) {
       final data = jsonDecode(response.body) as Map<String, dynamic>;
@@ -242,40 +262,50 @@ class ApiClient {
       Uri.parse('$baseUrl/users/me/google'),
       headers: await _authHeaders(),
     );
-    if (response.statusCode != 200) return const GoogleLinkStatus(linked: false);
-    return GoogleLinkStatus.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+    if (response.statusCode != 200)
+      return const GoogleLinkStatus(linked: false);
+    return GoogleLinkStatus.fromJson(
+        jsonDecode(response.body) as Map<String, dynamic>);
   }
 
   Future<void> unlinkGoogle() async {
-    await http.delete(Uri.parse('$baseUrl/users/me/google'), headers: await _authHeaders());
+    await http.delete(Uri.parse('$baseUrl/users/me/google'),
+        headers: await _authHeaders());
   }
 
   // ── LINE Link ─────────────────────────────────────────────────────────────
 
   Future<LineLinkStatus> fetchLineLink() async {
-    final response = await http.get(Uri.parse('$baseUrl/line/link'), headers: await _authHeaders());
+    final response = await http.get(Uri.parse('$baseUrl/line/link'),
+        headers: await _authHeaders());
     if (response.statusCode != 200) return const LineLinkStatus(linked: false);
-    return LineLinkStatus.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+    return LineLinkStatus.fromJson(
+        jsonDecode(response.body) as Map<String, dynamic>);
   }
 
   Future<String> createLineLinkCode() async {
-    final response = await http.post(Uri.parse('$baseUrl/line/link'), headers: await _authHeaders());
+    final response = await http.post(Uri.parse('$baseUrl/line/link'),
+        headers: await _authHeaders());
     if (response.statusCode != 200) throw Exception('產生綁定碼失敗');
     final data = jsonDecode(response.body) as Map<String, dynamic>;
     return data['code'] as String;
   }
 
   Future<void> unlinkLine() async {
-    await http.delete(Uri.parse('$baseUrl/line/link'), headers: await _authHeaders());
+    await http.delete(Uri.parse('$baseUrl/line/link'),
+        headers: await _authHeaders());
   }
 
   // ── Cards ─────────────────────────────────────────────────────────────────
 
   Future<List<AppCard>> fetchCards() async {
-    final response = await http.get(Uri.parse('$baseUrl/cards'), headers: await _authHeaders());
+    final response = await http.get(Uri.parse('$baseUrl/cards'),
+        headers: await _authHeaders());
     if (response.statusCode != 200) throw Exception('載入卡片失敗');
     final List<dynamic> data = jsonDecode(response.body);
-    return data.map((json) => AppCard.fromJson(json as Map<String, dynamic>)).toList();
+    return data
+        .map((json) => AppCard.fromJson(json as Map<String, dynamic>))
+        .toList();
   }
 
   Future<AppCard> updateCard(
@@ -347,12 +377,14 @@ class ApiClient {
         'share_credit_with_bank': shareCreditWithBank,
       }),
     );
-    if (response.statusCode != 200 && response.statusCode != 201) throw Exception('新增卡片失敗');
+    if (response.statusCode != 200 && response.statusCode != 201)
+      throw Exception('新增卡片失敗');
     return AppCard.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
   }
 
   Future<void> deleteCard(int cardId) async {
-    final response = await http.delete(Uri.parse('$baseUrl/cards/$cardId'), headers: await _authHeaders());
+    final response = await http.delete(Uri.parse('$baseUrl/cards/$cardId'),
+        headers: await _authHeaders());
     if (response.statusCode != 200) throw Exception('刪除卡片失敗');
   }
 
@@ -360,11 +392,13 @@ class ApiClient {
 
   Future<BankCreditSetting> fetchBankCreditSetting(String bankName) async {
     final response = await http.get(
-      Uri.parse('$baseUrl/bank-credit-settings/${Uri.encodeComponent(bankName)}'),
+      Uri.parse(
+          '$baseUrl/bank-credit-settings/${Uri.encodeComponent(bankName)}'),
       headers: await _authHeaders(),
     );
     if (response.statusCode != 200) throw Exception('載入結帳設定失敗');
-    return BankCreditSetting.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+    return BankCreditSetting.fromJson(
+        jsonDecode(response.body) as Map<String, dynamic>);
   }
 
   Future<BankCreditSetting> updateBankCreditSetting(
@@ -373,7 +407,8 @@ class ApiClient {
     double? manualPeriodAmount,
   }) async {
     final response = await http.put(
-      Uri.parse('$baseUrl/bank-credit-settings/${Uri.encodeComponent(bankName)}'),
+      Uri.parse(
+          '$baseUrl/bank-credit-settings/${Uri.encodeComponent(bankName)}'),
       headers: await _authHeaders(),
       body: jsonEncode({
         'billing_day': billingDay,
@@ -381,24 +416,28 @@ class ApiClient {
       }),
     );
     if (response.statusCode != 200) throw Exception('更新結帳設定失敗');
-    return BankCreditSetting.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+    return BankCreditSetting.fromJson(
+        jsonDecode(response.body) as Map<String, dynamic>);
   }
 
   Future<BankCreditSummary?> fetchBankCreditSummary(String bankName) async {
     final response = await http.get(
-      Uri.parse('$baseUrl/bank-credit-settings/${Uri.encodeComponent(bankName)}/summary'),
+      Uri.parse(
+          '$baseUrl/bank-credit-settings/${Uri.encodeComponent(bankName)}/summary'),
       headers: await _authHeaders(),
     );
     if (response.statusCode == 404) return null;
     if (response.statusCode != 200) throw Exception('載入信用卡摘要失敗');
-    return BankCreditSummary.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+    return BankCreditSummary.fromJson(
+        jsonDecode(response.body) as Map<String, dynamic>);
   }
 
   Future<BankBill> payBankBill(String bankName, DateTime closingDate) async {
     final closing =
         '${closingDate.year.toString().padLeft(4, '0')}-${closingDate.month.toString().padLeft(2, '0')}-${closingDate.day.toString().padLeft(2, '0')}';
     final response = await http.post(
-      Uri.parse('$baseUrl/bank-credit-settings/${Uri.encodeComponent(bankName)}/bills/$closing/pay'),
+      Uri.parse(
+          '$baseUrl/bank-credit-settings/${Uri.encodeComponent(bankName)}/bills/$closing/pay'),
       headers: await _authHeaders(),
     );
     if (response.statusCode != 200) throw Exception('標記已繳失敗');
@@ -408,8 +447,10 @@ class ApiClient {
   // ── Income ────────────────────────────────────────────────────────────────
 
   Future<List<Income>> fetchIncomes() async {
-    final response = await http.get(Uri.parse('$baseUrl/income'), headers: await _authHeaders());
-    if (response.statusCode != 200) throw Exception('Failed to load income: ${response.statusCode}');
+    final response = await http.get(Uri.parse('$baseUrl/income'),
+        headers: await _authHeaders());
+    if (response.statusCode != 200)
+      throw Exception('Failed to load income: ${response.statusCode}');
     final List<dynamic> data = jsonDecode(response.body);
     return data.map((json) => Income.fromJson(json)).toList();
   }
@@ -436,7 +477,8 @@ class ApiClient {
   }
 
   Future<void> deleteIncome(int incomeId) async {
-    final response = await http.delete(Uri.parse('$baseUrl/income/$incomeId'), headers: await _authHeaders());
+    final response = await http.delete(Uri.parse('$baseUrl/income/$incomeId'),
+        headers: await _authHeaders());
     if (response.statusCode != 200) throw Exception('刪除收入失敗');
   }
 
@@ -449,7 +491,9 @@ class ApiClient {
     final response = await http.get(uri, headers: await _authHeaders());
     if (response.statusCode != 200) throw Exception('載入交易記錄失敗');
     final List<dynamic> data = jsonDecode(response.body);
-    return data.map((json) => Transaction.fromJson(json as Map<String, dynamic>)).toList();
+    return data
+        .map((json) => Transaction.fromJson(json as Map<String, dynamic>))
+        .toList();
   }
 
   Future<Transaction> createTransaction({
@@ -483,7 +527,8 @@ class ApiClient {
       }),
     );
     if (response.statusCode != 200) throw Exception('新增交易失敗');
-    return Transaction.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+    return Transaction.fromJson(
+        jsonDecode(response.body) as Map<String, dynamic>);
   }
 
   Future<Transaction> markCodPaid(int transactionId) async {
@@ -492,7 +537,8 @@ class ApiClient {
       headers: await _authHeaders(),
     );
     if (response.statusCode != 200) throw Exception('標記付款失敗');
-    return Transaction.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+    return Transaction.fromJson(
+        jsonDecode(response.body) as Map<String, dynamic>);
   }
 
   Future<Transaction> updateTransaction(
@@ -514,7 +560,8 @@ class ApiClient {
       body: jsonEncode(body),
     );
     if (response.statusCode != 200) throw Exception('更新交易失敗');
-    return Transaction.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+    return Transaction.fromJson(
+        jsonDecode(response.body) as Map<String, dynamic>);
   }
 
   Future<void> deleteTransaction(int transactionId) async {
@@ -527,7 +574,8 @@ class ApiClient {
 
   // ── E-Invoice CSV 匯入 ────────────────────────────────────────────────────
 
-  Future<EinvoiceImportResult> importEinvoiceCsv(File file, {int? cardId}) async {
+  Future<EinvoiceImportResult> importEinvoiceCsv(File file,
+      {int? cardId}) async {
     final uri = Uri.parse('$baseUrl/einvoice/import').replace(
       queryParameters: cardId != null ? {'card_id': '$cardId'} : null,
     );
@@ -540,7 +588,8 @@ class ApiClient {
     final streamed = await request.send();
     final response = await http.Response.fromStream(streamed);
     if (response.statusCode != 200) throw Exception('匯入發票失敗');
-    return EinvoiceImportResult.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+    return EinvoiceImportResult.fromJson(
+        jsonDecode(response.body) as Map<String, dynamic>);
   }
 
   // ── 待確認截圖（透過 LINE 轉傳給 Bot）─────────────────────────────────────
@@ -552,7 +601,9 @@ class ApiClient {
     );
     if (response.statusCode != 200) throw Exception('載入待確認截圖失敗');
     final List<dynamic> data = jsonDecode(response.body);
-    return data.map((json) => PendingScreenshot.fromJson(json as Map<String, dynamic>)).toList();
+    return data
+        .map((json) => PendingScreenshot.fromJson(json as Map<String, dynamic>))
+        .toList();
   }
 
   Future<Uint8List> fetchPendingScreenshotImage(int id) async {
@@ -588,7 +639,10 @@ class ApiClient {
     );
     if (response.statusCode != 200) throw Exception('載入待確認班表照片失敗');
     final List<dynamic> data = jsonDecode(response.body);
-    return data.map((json) => PendingRosterPhoto.fromJson(json as Map<String, dynamic>)).toList();
+    return data
+        .map(
+            (json) => PendingRosterPhoto.fromJson(json as Map<String, dynamic>))
+        .toList();
   }
 
   Future<Uint8List> fetchPendingRosterPhotoImage(int id) async {
@@ -620,7 +674,9 @@ class ApiClient {
     required DateTime periodEnd,
     required List<Map<String, dynamic>> shifts,
   }) async {
-    final path = pendingId != null ? '/roster/pending/$pendingId/confirm' : '/roster/confirm';
+    final path = pendingId != null
+        ? '/roster/pending/$pendingId/confirm'
+        : '/roster/confirm';
     final response = await http.post(
       Uri.parse('$baseUrl$path'),
       headers: await _authHeaders(),
@@ -632,7 +688,8 @@ class ApiClient {
       }),
     );
     if (response.statusCode != 200) throw Exception('匯入班表失敗');
-    return RosterUpload.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+    return RosterUpload.fromJson(
+        jsonDecode(response.body) as Map<String, dynamic>);
   }
 
   Future<List<RosterUpload>> fetchRosterUploads() async {
@@ -642,7 +699,9 @@ class ApiClient {
     );
     if (response.statusCode != 200) throw Exception('載入班表紀錄失敗');
     final List<dynamic> data = jsonDecode(response.body);
-    return data.map((json) => RosterUpload.fromJson(json as Map<String, dynamic>)).toList();
+    return data
+        .map((json) => RosterUpload.fromJson(json as Map<String, dynamic>))
+        .toList();
   }
 
   Future<void> deleteRosterUpload(int id) async {
@@ -652,15 +711,19 @@ class ApiClient {
     );
   }
 
-  Future<List<RosterShift>> fetchRosterShifts(DateTime start, DateTime end) async {
+  Future<List<RosterShift>> fetchRosterShifts(DateTime start, DateTime end,
+      {int? jobId}) async {
     final uri = Uri.parse('$baseUrl/roster/shifts').replace(queryParameters: {
       'start': start.toIso8601String().split('T').first,
       'end': end.toIso8601String().split('T').first,
+      if (jobId != null) 'job_id': '$jobId',
     });
     final response = await http.get(uri, headers: await _authHeaders());
     if (response.statusCode != 200) throw Exception('載入班表失敗');
     final List<dynamic> data = jsonDecode(response.body);
-    return data.map((json) => RosterShift.fromJson(json as Map<String, dynamic>)).toList();
+    return data
+        .map((json) => RosterShift.fromJson(json as Map<String, dynamic>))
+        .toList();
   }
 
   Future<AppCard> updateCardBalance(int cardId, double balance) async {
@@ -676,8 +739,10 @@ class ApiClient {
   // ── Friends ───────────────────────────────────────────────────────────────
 
   Future<List<Friendship>> fetchFriendships() async {
-    final response = await http.get(Uri.parse('$baseUrl/friends'), headers: await _authHeaders());
-    if (response.statusCode != 200) throw Exception('Failed to load friends: ${response.statusCode}');
+    final response = await http.get(Uri.parse('$baseUrl/friends'),
+        headers: await _authHeaders());
+    if (response.statusCode != 200)
+      throw Exception('Failed to load friends: ${response.statusCode}');
     final List<dynamic> data = jsonDecode(response.body);
     return data.map((json) => Friendship.fromJson(json)).toList();
   }
@@ -711,7 +776,9 @@ class ApiClient {
     );
     if (response.statusCode != 200) throw Exception('載入群組班表失敗');
     final List<dynamic> data = jsonDecode(response.body);
-    return data.map((json) => GroupShift.fromJson(json as Map<String, dynamic>)).toList();
+    return data
+        .map((json) => GroupShift.fromJson(json as Map<String, dynamic>))
+        .toList();
   }
 
   Future<List<JobShareInfo>> fetchJobShares(int jobId) async {
@@ -721,7 +788,9 @@ class ApiClient {
     );
     if (response.statusCode != 200) throw Exception('載入共享設定失敗');
     final List<dynamic> data = jsonDecode(response.body);
-    return data.map((json) => JobShareInfo.fromJson(json as Map<String, dynamic>)).toList();
+    return data
+        .map((json) => JobShareInfo.fromJson(json as Map<String, dynamic>))
+        .toList();
   }
 
   Future<void> addJobShare(int jobId, int friendId) async {
