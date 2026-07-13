@@ -22,12 +22,25 @@ final _dateToken = RegExp(r'(\d{1,2})[/\-](\d{1,2})');
 final _cellToken = RegExp(r'(\d{3,4})\s*[-–~]\s*(\d{3,4})|([-–—])');
 
 const _stopWords = [
-  '預估', 'PSD', '合計', '工時', '最低標準', '差異', '提醒',
-  '角色', '員工姓名', '代班', '特休', '備註', '排班表', '核印',
+  '預估',
+  'PSD',
+  '合計',
+  '工時',
+  '最低標準',
+  '差異',
+  '提醒',
+  '角色',
+  '員工姓名',
+  '代班',
+  '特休',
+  '備註',
+  '排班表',
+  '核印',
 ];
 
 class RosterRowGuess {
   final String employeeName;
+
   /// 一格對應一個日期欄：`null` 代表看起來是休假或沒抓到東西，
   /// 有值時是 "HHmm-HHmm" 格式的原始猜測，交給校正畫面顯示/編輯。
   final List<String?> cells;
@@ -65,7 +78,8 @@ class _DateHit {
 /// 不是跟整群目前的邊界（min top ~ max top）比對——用整群邊界的話，群會
 /// 越併越高，導致後面明明是下一列的行也被判定成「跟這個越來越高的範圍
 /// 重疊」而誤併，之前實測真的發生過兩個人被併成同一列。
-List<List<T>> _clusterByYOverlap<T>(List<T> sortedByTop, Rect Function(T) boxOf) {
+List<List<T>> _clusterByYOverlap<T>(
+    List<T> sortedByTop, Rect Function(T) boxOf) {
   final clusters = <List<T>>[];
   for (final item in sortedByTop) {
     final itemBox = boxOf(item);
@@ -93,7 +107,8 @@ RosterTableGuess parseRosterTableFromRecognizedText(
   final year = referenceYear ?? DateTime.now().year;
   final lines = <_PositionedLine>[
     for (final block in recognized.blocks)
-      for (final line in block.lines) _PositionedLine(line.text, line.boundingBox),
+      for (final line in block.lines)
+        _PositionedLine(line.text, line.boundingBox),
   ];
 
   final guess = _clusterGeometry(lines, year);
@@ -120,14 +135,50 @@ RosterTableGuess _clusterGeometry(List<_PositionedLine> lines, int year) {
 
   // 表頭常常被拆成好幾行、順序也亂——用 Y 區間分群，取最大群當表頭，群內
   // 再依 X 排序還原正確的左到右欄位順序（信任座標，不信任文字出現順序）。
-  final dateHitsByTop = List.of(dateHits)..sort((a, b) => a.box.top.compareTo(b.box.top));
+  final dateHitsByTop = List.of(dateHits)
+    ..sort((a, b) => a.box.top.compareTo(b.box.top));
   final dateGroups = _clusterByYOverlap(dateHitsByTop, (h) => h.box);
-  final headerCluster = dateGroups.reduce((a, b) => a.length >= b.length ? a : b);
-  final headerSorted = List.of(headerCluster)..sort((a, b) => a.x.compareTo(b.x));
+  final headerCluster =
+      dateGroups.reduce((a, b) => a.length >= b.length ? a : b);
+
+  // 拍照角度造成的透視變形，常常讓表頭其中幾欄的日期文字 Y 座標跟其他欄
+  // 有落差，導致明明是同一列的表頭被拆成兩個以上的 Y 群組——這時候不能只
+  // 取最大群、把其他群當雜訊丟掉，不然那幾欄日期會整欄消失（實測照片真的
+  // 發生過一次少兩欄）。其他群只要 Y 中心點落在主群高度的合理範圍內，就
+  // 當作同一個表頭一起收進來；同一個日期如果在兩群裡各出現一次（少見的
+  // OCR 重複辨識），保留離主群中心較近的那個。
+  final headerTop =
+      headerCluster.map((h) => h.box.top).reduce((a, b) => a < b ? a : b);
+  final headerBottomOfCluster =
+      headerCluster.map((h) => h.box.bottom).reduce((a, b) => a > b ? a : b);
+  final headerHeight = headerBottomOfCluster - headerTop;
+  final headerCenterY = (headerTop + headerBottomOfCluster) / 2;
+  final byDate = <DateTime, _DateHit>{};
+  for (final group in dateGroups) {
+    final isHeaderGroup = identical(group, headerCluster);
+    final groupCenterY =
+        group.map((h) => h.box.center.dy).reduce((a, b) => a + b) /
+            group.length;
+    if (!isHeaderGroup &&
+        (groupCenterY - headerCenterY).abs() > headerHeight * 1.5) {
+      continue; // 離表頭太遠，是表格本體或其他地方的雜訊，不是被拆散的表頭
+    }
+    for (final hit in group) {
+      final existing = byDate[hit.date];
+      if (existing == null ||
+          (hit.box.center.dy - headerCenterY).abs() <
+              (existing.box.center.dy - headerCenterY).abs()) {
+        byDate[hit.date] = hit;
+      }
+    }
+  }
+  final headerSorted = byDate.values.toList()
+    ..sort((a, b) => a.x.compareTo(b.x));
 
   final dates = headerSorted.map((h) => h.date).toList();
   final dateColX = headerSorted.map((h) => h.x).toList();
-  final headerBottom = headerCluster.map((h) => h.box.bottom).reduce((a, b) => a > b ? a : b);
+  final headerBottom =
+      headerSorted.map((h) => h.box.bottom).reduce((a, b) => a > b ? a : b);
 
   double avgSpacing = 100;
   if (dateColX.length >= 2) {
@@ -137,6 +188,22 @@ RosterTableGuess _clusterGeometry(List<_PositionedLine> lines, int year) {
     }
     avgSpacing = totalGap / (dateColX.length - 1);
   }
+  // 每一欄各自的容忍範圍，看它自己跟左右鄰欄的實際距離，不要用整張表格的
+  // 平均欄寬——拍照的透視變形常常讓表格一邊（尤其六、日這種最外側的欄）
+  // 比另一邊寬，用同一個全域平均值篩，這幾欄的格子常常被誤判成離欄位太
+  // 遠而丟棄，明明那天有排班却顯示成沒辨識到。
+  final colTolerance = List<double>.generate(dateColX.length, (i) {
+    if (dateColX.length == 1) return avgSpacing * 0.6;
+    final leftGap = i > 0 ? dateColX[i] - dateColX[i - 1] : null;
+    final rightGap =
+        i < dateColX.length - 1 ? dateColX[i + 1] - dateColX[i] : null;
+    final gap = leftGap == null
+        ? rightGap!
+        : rightGap == null
+            ? leftGap
+            : (leftGap < rightGap ? leftGap : rightGap);
+    return gap * 0.6;
+  });
   // 第一個日期欄實際的左邊界，左邊全部算「標籤區」（角色欄 + 姓名欄都在
   // 這裡，源表格常常是兩欄），不要用猜出來的虛擬欄寬去切——猜錯會讓真正
   // 的姓名反而比較靠近第一個日期欄，被判成日期資料而不是姓名。
@@ -151,27 +218,38 @@ RosterTableGuess _clusterGeometry(List<_PositionedLine> lines, int year) {
   // 跟「格子區」兩塊。每一列的身分完全交給標籤區裡的姓名決定——一個人
   // 一列只會有一個姓名，比整列（姓名 + 一堆時間格）一起分群穩得多：之前
   // 用全部行一起分群，格子太密集，容易讓兩個人的姓名被併成同一列。
-  final labelLines = bodyLines.where((l) => l.box.center.dx < labelZoneRight).toList();
-  final cellLines = bodyLines.where((l) => l.box.center.dx >= labelZoneRight).toList();
+  final labelLines =
+      bodyLines.where((l) => l.box.center.dx < labelZoneRight).toList();
+  final cellLines =
+      bodyLines.where((l) => l.box.center.dx >= labelZoneRight).toList();
 
   final nameLines = <_PositionedLine>[];
   for (final line in labelLines) {
+    // 彙總列的標籤（「預估PSD」「合計工時」…）也在標籤區、也有中文字，
+    // 這裡要先濾掉，不能只靠最後對每一列姓名做的 stopword 檢查——如果表格
+    // 最後一位員工的姓名行跟彙總列標籤 Y 座標黏太近被分到同一群，合併後
+    // 的文字會整段含有 stopword 而被判定成雜訊列，連員工姓名一起被丟掉。
+    if (_stopWords.any((w) => line.text.contains(w))) continue;
     // 角色欄（PT/PM/P/PI 這種純英文代碼）跟表格框線誤判成的雜訊字元都
     // 沒有中文字，直接濾掉；只取中文字元本身，不管前後黏著什麼雜訊。
-    final cjk = RegExp(r'[一-鿿]+').allMatches(line.text).map((m) => m.group(0)!).join();
+    final cjk =
+        RegExp(r'[一-鿿]+').allMatches(line.text).map((m) => m.group(0)!).join();
     if (cjk.isNotEmpty) nameLines.add(_PositionedLine(cjk, line.box));
   }
   if (nameLines.isEmpty) return const RosterTableGuess(dates: [], rows: []);
 
   // 姓名行彼此分群（同一人的姓名如果被拆成兩行會併回來），每一群就是一列。
-  final nameLinesByTop = List.of(nameLines)..sort((a, b) => a.box.top.compareTo(b.box.top));
+  final nameLinesByTop = List.of(nameLines)
+    ..sort((a, b) => a.box.top.compareTo(b.box.top));
   final nameGroups = _clusterByYOverlap(nameLinesByTop, (l) => l.box);
 
   final rowAnchors = nameGroups.map((group) {
-    final name = (List.of(group)..sort((a, b) => a.box.left.compareTo(b.box.left)))
+    final name = (List.of(group)
+          ..sort((a, b) => a.box.left.compareTo(b.box.left)))
         .map((l) => l.text)
         .join();
-    final centerY = group.map((l) => l.box.center.dy).reduce((a, b) => a + b) / group.length;
+    final centerY = group.map((l) => l.box.center.dy).reduce((a, b) => a + b) /
+        group.length;
     return (name: name, y: centerY);
   }).toList()
     ..sort((a, b) => a.y.compareTo(b.y));
@@ -185,7 +263,8 @@ RosterTableGuess _clusterGeometry(List<_PositionedLine> lines, int year) {
     avgRowSpacing = totalGap / (rowAnchors.length - 1);
   }
 
-  final cellPartsByRow = List.generate(rowAnchors.length, (_) => List<List<String>>.generate(dates.length, (_) => []));
+  final cellPartsByRow = List.generate(rowAnchors.length,
+      (_) => List<List<String>>.generate(dates.length, (_) => []));
   for (final line in cellLines) {
     // 每一格依 Y 座標指派給最近的列——跟依 X 座標指派日期欄是同一套邏輯。
     var nearestRow = 0;
@@ -210,7 +289,7 @@ RosterTableGuess _clusterGeometry(List<_PositionedLine> lines, int year) {
       }
     }
     // 日期欄要套距離篩選，用來濾掉代班/特休/備註/合計等尾端彙總欄位。
-    if (nearestColDist <= avgSpacing * 0.6) {
+    if (nearestColDist <= colTolerance[nearestCol]) {
       cellPartsByRow[nearestRow][nearestCol].add(line.text);
     }
   }
@@ -278,7 +357,8 @@ RosterTableGuess parseRosterTable(String rawText, {int? referenceYear}) {
     final name = line.substring(0, firstCellChar).trim();
     if (name.isEmpty) continue;
 
-    final cellMatches = _cellToken.allMatches(line.substring(firstCellChar)).toList();
+    final cellMatches =
+        _cellToken.allMatches(line.substring(firstCellChar)).toList();
     if (cellMatches.isEmpty) continue; // 完全沒抓到班次資訊，八成不是員工列
 
     final cells = List<String?>.filled(dates.length, null);

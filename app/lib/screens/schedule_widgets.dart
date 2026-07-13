@@ -149,14 +149,90 @@ class _DayBottomSheetState extends State<DayBottomSheet> {
     return rotated;
   }
 
+  int _toMinutes(String hhmmss) {
+    final parts = hhmmss.split(':');
+    return int.parse(parts[0]) * 60 + int.parse(parts[1]);
+  }
+
+  int _durationMinutes(int start, int end) =>
+      end > start ? end - start : (24 * 60 - start) + end;
+
+  /// 兩個(可能跨夜)時間區間實際重疊的分鐘數，跨夜的區間用往前/往後平移
+  /// 一天的方式各算一次，取重疊最多的那個對齊方式。
+  int _overlapMinutes(int aStart, int aDur, int bStart, int bDur) {
+    var best = 0;
+    for (final shift in [-24 * 60, 0, 24 * 60]) {
+      final bs = bStart + shift;
+      final overlapStart = aStart > bs ? aStart : bs;
+      final overlapEnd =
+          (aStart + aDur) < (bs + bDur) ? (aStart + aDur) : (bs + bDur);
+      final overlap = overlapEnd - overlapStart;
+      if (overlap > best) best = overlap;
+    }
+    return best;
+  }
+
+  /// 匯入的班表常常對不到精準的班別預設(OCR 讀到的時間跟預設差一點、或
+  /// 這個工作根本沒設定完全相符的班別)，這時候不要顯示原始時間，改看實際
+  /// 時間跟哪個班別預設重疊最多，歸類到那一班；完全沒重疊就退回用開始時間
+  /// 最接近的班別。真的一個班別都沒有(這個工作沒設定過)才顯示原始時間。
+  ShiftPreset? _bestPreset(RosterShift s, List<ShiftPreset> presets) {
+    if (presets.isEmpty || s.startTime == null || s.endTime == null)
+      return null;
+    final sStart = _toMinutes(s.startTime!);
+    final sDur = _durationMinutes(sStart, _toMinutes(s.endTime!));
+
+    ShiftPreset? bestByOverlap;
+    var bestOverlap = 0;
+    for (final p in presets) {
+      final pStart = _toMinutes(p.startTime);
+      final pDur = _durationMinutes(pStart, _toMinutes(p.endTime));
+      final overlap = _overlapMinutes(sStart, sDur, pStart, pDur);
+      if (overlap > bestOverlap) {
+        bestOverlap = overlap;
+        bestByOverlap = p;
+      }
+    }
+    if (bestByOverlap != null) return bestByOverlap;
+
+    ShiftPreset? closest;
+    var closestDist = 24 * 60;
+    for (final p in presets) {
+      final diff = (sStart - _toMinutes(p.startTime)).abs();
+      final dist = diff > 12 * 60 ? 24 * 60 - diff : diff;
+      if (dist < closestDist) {
+        closestDist = dist;
+        closest = p;
+      }
+    }
+    return closest;
+  }
+
+  String _shiftLabel(RosterShift s) {
+    if (s.shiftType != null) return s.shiftType!;
+    final best = _bestPreset(s, _selectedJob?.presets ?? []);
+    if (best != null) return best.label;
+    return '${s.startTime}-${s.endTime}';
+  }
+
+  /// 休假(start/end 皆空)的人不列進「誰上班」，只看實際有上班的人。
+  List<RosterShift> get _workingRosterShifts => _rosterShifts
+      .where((s) => s.startTime != null && s.endTime != null)
+      .toList();
+
   List<RosterShift> get _sortedRosterShifts {
     final presets = _selectedJob?.presets ?? [];
-    if (presets.isEmpty) return _rosterShifts;
+    final working = _workingRosterShifts;
+    if (presets.isEmpty) return working;
     final order = _rankedPresets(presets, DateTime.now());
     final rank = {for (var i = 0; i < order.length; i++) order[i].label: i};
-    final sorted = List<RosterShift>.from(_rosterShifts);
-    sorted.sort((a, b) => (rank[a.shiftType] ?? order.length)
-        .compareTo(rank[b.shiftType] ?? order.length));
+    final sorted = List<RosterShift>.from(working);
+    sorted.sort((a, b) {
+      final aLabel = _bestPreset(a, presets)?.label;
+      final bLabel = _bestPreset(b, presets)?.label;
+      return (rank[aLabel] ?? order.length)
+          .compareTo(rank[bLabel] ?? order.length);
+    });
     return sorted;
   }
 
@@ -296,10 +372,10 @@ class _DayBottomSheetState extends State<DayBottomSheet> {
                           child: CircularProgressIndicator(strokeWidth: 2)),
                     ),
                   )
-                else if (_rosterShifts.isEmpty)
+                else if (_sortedRosterShifts.isEmpty)
                   Padding(
                     padding: const EdgeInsets.symmetric(vertical: 4),
-                    child: Text('這個工作還沒有匯入這天的班表',
+                    child: Text('這個工作今天沒有人上班',
                         style: TextStyle(
                             color: Theme.of(context).colorScheme.outline,
                             fontSize: 13)),
@@ -309,17 +385,12 @@ class _DayBottomSheetState extends State<DayBottomSheet> {
                     spacing: 8,
                     runSpacing: 8,
                     children: _sortedRosterShifts.map((s) {
-                      final off = s.startTime == null || s.endTime == null;
-                      final label = off
-                          ? '${s.employeeName} · 休'
-                          : '${s.employeeName} · ${s.shiftType ?? '${s.startTime}-${s.endTime}'}';
+                      final label = _shiftLabel(s);
                       return Chip(
-                        label:
-                            Text(label, style: const TextStyle(fontSize: 12)),
-                        backgroundColor: off
-                            ? null
-                            : (colorForShiftType(s.shiftType) ??
-                                    _selectedJob?.color)
+                        label: Text('${s.employeeName} · $label',
+                            style: const TextStyle(fontSize: 12)),
+                        backgroundColor:
+                            (colorForShiftType(label) ?? _selectedJob?.color)
                                 ?.withValues(alpha: 0.15),
                         side: BorderSide.none,
                         visualDensity: VisualDensity.compact,

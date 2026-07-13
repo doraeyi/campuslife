@@ -73,7 +73,8 @@ void main() {
       blocks: [_block(lines)],
     );
 
-    final guess = parseRosterTableFromRecognizedText(recognized, referenceYear: 2026);
+    final guess =
+        parseRosterTableFromRecognizedText(recognized, referenceYear: 2026);
 
     expect(guess.dates.length, 7);
     expect(
@@ -124,7 +125,8 @@ void main() {
       blocks: [_block(lines)],
     );
 
-    final guess = parseRosterTableFromRecognizedText(recognized, referenceYear: 2026);
+    final guess =
+        parseRosterTableFromRecognizedText(recognized, referenceYear: 2026);
 
     expect(guess.rows.length, 2);
     final yuJie = guess.rows.firstWhere((r) => r.employeeName == '育傑');
@@ -135,11 +137,117 @@ void main() {
     expect(yenBin.cells[1], isNull);
   });
 
+  test('拍照角度造成表頭被拆成兩個 Y 群組時，兩群都要收進表頭，不能只留最大群', () {
+    // 真實照片踩到的 bug：透視變形讓表頭 7 個日期裡有 2 個的 Y 座標跟其他
+    // 5 個有落差，形成兩個不重疊的 Y 群組。舊邏輯只取「最大群」，另一群的
+    // 2 個日期會直接消失（實測真的發生過一次少兩天）。
+    final lines = <TextLine>[
+      _line('07/13(一)', const Rect.fromLTWH(100, 90, 60, 20)),
+      _line('07/14(二)', const Rect.fromLTWH(200, 90, 60, 20)),
+      _line('07/16(四)', const Rect.fromLTWH(400, 90, 60, 20)),
+      _line('07/17(五)', const Rect.fromLTWH(500, 90, 60, 20)),
+      _line('07/19(日)', const Rect.fromLTWH(700, 90, 60, 20)),
+      // 這兩欄因為透視變形被 OCR 判在稍微低一點的 Y 位置，跟上面 5 個沒有
+      // Y 重疊（top=112 >= 主群 bottom=110），會被分到不同的群組。
+      _line('07/15(三)', const Rect.fromLTWH(300, 112, 60, 20)),
+      _line('07/18(六)', const Rect.fromLTWH(600, 112, 60, 20)),
+
+      _line('小明', const Rect.fromLTWH(20, 200, 60, 20)),
+      _line('0700-1500', const Rect.fromLTWH(290, 200, 60, 20)), // 07/15
+    ];
+
+    final recognized = RecognizedText(
+      text: lines.map((l) => l.text).join('\n'),
+      blocks: [_block(lines)],
+    );
+
+    final guess =
+        parseRosterTableFromRecognizedText(recognized, referenceYear: 2026);
+
+    expect(
+      guess.dates.map((d) => '${d.month}/${d.day}').toList(),
+      ['7/13', '7/14', '7/15', '7/16', '7/17', '7/18', '7/19'],
+    );
+    final xiaoMing = guess.rows.firstWhere((r) => r.employeeName == '小明');
+    expect(xiaoMing.cells[2], '0700-1500'); // 07/15 那一欄要對得到
+  });
+
+  test('欄距因透視變形不平均時，最外側欄位(六、日)的格子改用鄰欄實際距離判斷容忍度，不會被誤判成雜訊丟掉', () {
+    // 真實照片常踩到的狀況：拍照角度造成透視變形，表格最後一欄(日)跟前一
+    // 欄的間距比其他欄寬(150 vs 100)。舊邏輯用「整張表格的平均欄寬」算
+    // 容忍度，這欄的格子因為變形多偏了一點，距離超過用平均值算出來的門檻
+    // 就被當雜訊丟棄——看起來就像「六、日明明有排班卻沒辨識出來」。改成
+    // 看這欄自己跟鄰欄的實際距離之後，這種因變形被拉開的欄位才留得住。
+    final lines = <TextLine>[
+      _line('07/13(一)', const Rect.fromLTWH(100, 90, 60, 20)),
+      _line('07/14(二)', const Rect.fromLTWH(200, 90, 60, 20)),
+      _line('07/15(三)', const Rect.fromLTWH(300, 90, 60, 20)),
+      _line('07/16(四)', const Rect.fromLTWH(400, 90, 60, 20)),
+      _line('07/17(五)', const Rect.fromLTWH(500, 90, 60, 20)),
+      _line('07/18(六)', const Rect.fromLTWH(600, 90, 60, 20)),
+      // 透視變形讓最後一欄(日)離前一欄的間距比其他欄寬(150 對 100)。
+      _line('07/19(日)', const Rect.fromLTWH(750, 90, 60, 20)),
+
+      _line('小明', const Rect.fromLTWH(20, 200, 60, 20)),
+      // 這格中心點(710)離 07/19 欄中心(780)有 70px：用整張表格的平均欄寬
+      // (≈108.3)算容忍度只有 65，會被丟掉；改成看 07/19 欄自己跟左鄰欄
+      // (07/18)的實際距離(150)算，容忍度 90 才留得住。
+      _line('0700-1500', const Rect.fromLTWH(680, 200, 60, 20)),
+    ];
+
+    final recognized = RecognizedText(
+      text: lines.map((l) => l.text).join('\n'),
+      blocks: [_block(lines)],
+    );
+
+    final guess =
+        parseRosterTableFromRecognizedText(recognized, referenceYear: 2026);
+
+    expect(guess.dates.length, 7);
+    final xiaoMing = guess.rows.firstWhere((r) => r.employeeName == '小明');
+    expect(xiaoMing.cells[6], '0700-1500'); // 07/19
+  });
+
+  test('彙總列標籤 Y 座標跟最後一位員工的姓名黏太近時，不會把員工也一起判成雜訊丟掉', () {
+    // 真實照片踩到的 bug：表格最後一位員工「育傑」的姓名行跟底下彙總列
+    // 標籤「預估PSD」Y 範圍重疊，被分到同一個姓名群組，合併後的文字整段
+    // 含有 stopword「預估」，導致連育傑的姓名都被 stopword 檢查判定成雜訊
+    // 列一起丟掉——整個人從結果裡消失。標籤要在進姓名分群前就先濾掉，
+    // 不能只在分群後對合併文字做 stopword 檢查。
+    final lines = <TextLine>[
+      _line('07/13(一)', const Rect.fromLTWH(100, 90, 60, 20)),
+      _line('07/14(二)', const Rect.fromLTWH(200, 90, 60, 20)),
+
+      _line('育傑', const Rect.fromLTWH(20, 150, 60, 20)), // top=150, bottom=170
+      _line('0700-1500', const Rect.fromLTWH(90, 150, 60, 20)),
+      _line('1500-2300', const Rect.fromLTWH(190, 150, 60, 20)),
+
+      // 彙總列標籤，Y 範圍跟育傑的姓名行重疊（top=165 < 170，bottom=185 > 150）。
+      _line('預估PSD', const Rect.fromLTWH(20, 165, 80, 20)),
+      _line('105556', const Rect.fromLTWH(90, 165, 60, 20)),
+    ];
+
+    final recognized = RecognizedText(
+      text: lines.map((l) => l.text).join('\n'),
+      blocks: [_block(lines)],
+    );
+
+    final guess =
+        parseRosterTableFromRecognizedText(recognized, referenceYear: 2026);
+
+    expect(guess.rows.length, 1);
+    final yuJie = guess.rows.single;
+    expect(yuJie.employeeName, '育傑');
+    expect(yuJie.cells[0], '0700-1500');
+    expect(yuJie.cells[1], '1500-2300');
+  });
+
   test('完全沒有座標可用時，退回純文字解析', () {
     const rawText = '07/13(一) 07/14(二)\n小明 0700-1500 -\n';
     final recognized = RecognizedText(text: rawText, blocks: const []);
 
-    final guess = parseRosterTableFromRecognizedText(recognized, referenceYear: 2026);
+    final guess =
+        parseRosterTableFromRecognizedText(recognized, referenceYear: 2026);
 
     expect(guess.dates.length, 2);
     expect(guess.rows.single.employeeName, '小明');
